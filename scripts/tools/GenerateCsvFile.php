@@ -17,6 +17,8 @@ use \common_report_Report as Report;
 /**
  * Class GenerateCsvFile
  * @package oat\taoResultExports\scripts\tools
+ *
+ * usage : sudo -u www-data php index.php 'oat\taoResultExports\scripts\tools\GenerateCsvFile' -s title --policy all -p myDelivery
  */
 class GenerateCsvFile extends ScriptAction
 {
