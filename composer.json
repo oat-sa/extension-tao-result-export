@@ -1,0 +1,45 @@
+{
+    "name" : "oat-sa/extension-tao-result-export",
+    "description" : "Extension providing tools to export results.",
+    "type" : "tao-extension",
+    "extra" : {
+		"tao-extension-name" : "taoResultExports"
+	},
+    "authors" : [
+        {
+            "name" : "Open Assessment Technologies S.A.",
+            "homepage" : "http://www.taotesting.com"
+        }
+    ],
+    "support": {
+        "forum": "http://forum.taotesting.com",
+        "issues": "http://forge.taotesting.com"
+    },
+    "keywords" : [
+        "tao",
+        "oat",
+        "export",
+        "results",
+        "QTI",
+        "delivery",
+        "computer-based-assessment"
+    ],
+    "homepage" : "http://www.taotesting.com",
+    "license" : [
+        "GPL-2.0-only"
+    ],
+    "require" : {
+        "php" : ">=5.6",
+        "ext-zip": "*",
+        "oat-sa/oatbox-extension-installer": "~1.1||dev-master"
+    },
+    "require-dev": {
+        "mikey179/vfsStream": "^1.4.0"
+    },
+    "minimum-stability" : "dev",
+    "autoload" : {
+        "psr-4" : {
+            "oat\\taoResultExports\\" : ""
+        }
+    }
+}
