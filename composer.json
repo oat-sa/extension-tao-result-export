@@ -13,7 +13,7 @@
     ],
     "support": {
         "forum": "http://forum.taotesting.com",
-        "issues": "http://forge.taotesting.com"
+        "issues": "http://hub.taotesting.com"
     },
     "keywords" : [
         "tao",
@@ -34,7 +34,6 @@
         "oat-sa/oatbox-extension-installer": "~1.1||dev-master"
     },
     "require-dev": {
-        "mikey179/vfsStream": "^1.4.0"
     },
     "minimum-stability" : "dev",
     "autoload" : {
