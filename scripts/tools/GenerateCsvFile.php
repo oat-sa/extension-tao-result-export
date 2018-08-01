@@ -116,7 +116,11 @@ class GenerateCsvFile extends ScriptAction
 
         $prefix = ($this->hasOption('prefix'))?$this->getOption('prefix'):'export';
 
-        $bookletExporter = new AllBookletsExport($deliveries, $identifierStrategy, $prefix);
+        /** @var AllBookletsExport $bookletExporter */
+        $bookletExporter = $this->getServiceLocator()->get(AllBookletsExport::SERVICE_ID);
+        $bookletExporter->setDeliveries($deliveries);
+        $bookletExporter->setIdentifierStrategy($identifierStrategy);
+        $bookletExporter->setPrefix($prefix);
         $bookletExporter->setVariablePolicy($variablePolicy);
         
         // Param 4: Variable blacklist.

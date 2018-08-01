@@ -22,6 +22,7 @@ namespace oat\taoResultExports\model\export;
 
 use oat\oatbox\filesystem\File;
 use oat\oatbox\filesystem\FileSystemService;
+use oat\oatbox\service\ConfigurableService;
 use oat\oatbox\service\ServiceManager;
 use oat\taoDelivery\model\execution\ServiceProxy;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
@@ -32,9 +33,15 @@ use qtism\data\ExtendedAssessmentItemRef;
 use qtism\data\state\OutcomeDeclaration;
 use qtism\data\state\ResponseDeclaration;
 use qtism\data\storage\php\PhpDocument;
+use Zend\ServiceManager\ServiceLocatorAwareInterface;
+use Zend\ServiceManager\ServiceLocatorAwareTrait;
 
-class AllBookletsExport
+class AllBookletsExport extends ConfigurableService
 {
+    use ServiceLocatorAwareTrait;
+
+    const SERVICE_ID = 'taoResultExports/BookletsExport';
+
     const IDENTIFIER_STRATEGY_ITEMREFIDENTIFIER = 0;
     const IDENTIFIER_STRATEGY_TITLE = 1;
     const IDENTIFIER_STRATEGY_LABEL = 2;
@@ -51,16 +58,9 @@ class AllBookletsExport
     const FILESYSTEM_ID = 'resultExport';
     const FILESYSTEM_NAME = 'taoResultExports';
 
-    /**
-     * // Z - not needed for current delivery
-     * //      #1# (should be set in the getAllDeliveryData on merge results)
-     * //      #2# (or if item was skipped (branchRule))
-     * // Y - not attempted
-     * // W - student didn't
-     */
-    const NOT_REQUIRED = 'Z';
-    const NOT_ATTEMPTED = 'Y';
-    const NOT_RESPONDED = 'W';
+    const NOT_REQUIRED_OPTION = 'notRequired';
+    const NOT_ATTEMPTED_OPTION = 'notAttempted';
+    const NOT_RESPONDED_OPTION = 'notResponded';
 
     /**
      * Order and expected columns
@@ -116,12 +116,31 @@ class AllBookletsExport
     
     protected $flySystemFile;
 
-    public function __construct(array $deliveries, $identifierStrategy = 'itemRef', $prefix = 'export')
+    /**
+     * @param string $identifierStrategy
+     */
+    public function setIdentifierStrategy($identifierStrategy)
+    {
+        $this->identifierStrategy = $identifierStrategy;
+    }
+
+    /**
+     * @param array $deliveries
+     */
+    public function setDeliveries($deliveries)
     {
         $this->deliveries = $deliveries;
-        $this->identifierStrategy = $identifierStrategy;
-        $this->prefix = rtrim($prefix,'_').'_';
     }
+
+    /**
+     * @param string $prefix
+     */
+    public function setPrefix($prefix)
+    {
+        $this->prefix = rtrim($prefix,'_').'_';;
+    }
+
+
     
     public function setVariablePolicy($variablePolicy)
     {
@@ -175,7 +194,7 @@ class AllBookletsExport
         
         // Write as stream and close temporary file.
         $filename = $this->prefix. date('His') .'.csv';
-        $this->flySystemFile = $this->getServiceManager()
+        $this->flySystemFile = $this->getServiceLocator()
             ->get(FileSystemService::SERVICE_ID)
             ->getDirectory(self::FILESYSTEM_ID)
             ->getFile(date('Y_m_d') . gethostname() .'/'. $filename);
@@ -715,17 +734,17 @@ class AllBookletsExport
         
         foreach ($neededColumns as $column) {
             if (!in_array($column, array_keys($row))) {
-                $row[$column] = $this->determineMissingDataEncoding(self::NOT_ATTEMPTED, $column);
+                $row[$column] = $this->determineMissingDataEncoding($this->getOption(self::NOT_ATTEMPTED_OPTION), $column);
             }
             
             if ($row[$column] === '' || $row[$column] === '[]' || $row[$column] === '<>') {
-                $row[$column] = $this->determineMissingDataEncoding(self::NOT_RESPONDED, $column);
+                $row[$column] = $this->determineMissingDataEncoding($this->getOption(self::NOT_RESPONDED_OPTION), $column);
             }
         }
 
         foreach ($emptyColumns as $column) {
             if (!in_array($column, array_keys($row))) {
-                $row[$column] = $this->determineMissingDataEncoding(self::NOT_REQUIRED, $column);
+                $row[$column] = $this->determineMissingDataEncoding($this->getOption(self::NOT_REQUIRED_OPTION), $column);
             }
         }
     }
@@ -797,11 +816,6 @@ class AllBookletsExport
             default:
                 return $assessmentItemRef->getIdentifier();
         }
-    }
-
-    private function getServiceManager()
-    {
-        return ServiceManager::getServiceManager();
     }
     
     private function cleanTimestamp($ts)
