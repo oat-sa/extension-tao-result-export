@@ -18,10 +18,9 @@
  *
  */
 
-namespace oat\taoOperations\scripts\update;
+namespace oat\taoResultExports\scripts\update;
 
-use oat\tao\model\accessControl\func\AclProxy;
-use oat\tao\model\accessControl\func\AccessRule;
+use oat\taoResultExports\model\export\AllBookletsExport;
 
 /**
  * TAO Operations Extension Updater.
@@ -29,8 +28,8 @@ use oat\tao\model\accessControl\func\AccessRule;
  * This class provides an implementation of the Generis
  * Extension Updater aiming at updating the TAO Operations Extension.
  */
-class Updater extends \common_ext_ExtensionUpdater {
-
+class Updater extends \common_ext_ExtensionUpdater
+{
     /**
      * Update the Extension
      * 
@@ -40,9 +39,16 @@ class Updater extends \common_ext_ExtensionUpdater {
      * @param string $initialVersion
      * @see \common_ext_ExtensionUpdater
      * @return void
+     *
+     * @throws \Exception
      */
-    public function update($initialVersion) {
-        
-
+    public function update($initialVersion)
+    {
+        if ($this->isVersion('0.0.1')) {
+            $bookletExporterService = $this->getServiceManager()->get(AllBookletsExport::SERVICE_ID);
+            $bookletExporterService->setOption(AllBookletsExport::OPTION_NUMBER_OF_DAILY_EXPORT, 3);
+            $this->getServiceManager()->register(AllBookletsExport::SERVICE_ID, $bookletExporterService);
+            $this->setVersion('0.1.0');
+        }
     }
 }
