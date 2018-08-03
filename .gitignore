@@ -1,0 +1,10 @@
+.settings
+.buildpath
+.project
+vendor/
+composer.lock
+composer.phar
+phpDocumentor.phar
+phpunit.xml
+*.geany
+.idea
