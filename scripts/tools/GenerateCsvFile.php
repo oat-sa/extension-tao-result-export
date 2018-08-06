@@ -98,8 +98,6 @@ class GenerateCsvFile extends ScriptAction
     {
         $delivery = $this->getOption('delivery');
 
-        $startTime = microtime(true);
-
         if (is_null($delivery) || strtolower($delivery) === 'all'){
             $deliveries = DeliveryAssemblyService::singleton()->getRootClass()->getInstances(true);
         } else {
@@ -136,20 +134,16 @@ class GenerateCsvFile extends ScriptAction
 
         
         // Param 5: Raw mode.
-        $rawMode = $this->getOption('raw');
-        if (!is_null($rawMode)) {
+        if ($this->hasOption('raw')) {
             $bookletExporter->addAlternateMissingDataEnconding($bookletExporter->getOption(AllBookletsExport::NOT_RESPONDED_OPTION), '');
         }
 
         // Param 6: split export by day
-        if (is_null($this->getOption('daily'))) {
+        if (!$this->hasOption('daily')) {
             $exportReport = $bookletExporter->export();
         } else {
             $exportReport = $bookletExporter->dailyExport();
         }
-
-        $endTime = microtime(true);
-        $totalTime = $this->formatTime($endTime - $startTime);
 
         $report = new \common_report_Report(
             \common_report_Report::TYPE_INFO,
@@ -159,7 +153,6 @@ class GenerateCsvFile extends ScriptAction
         );
         
         $report->add($exportReport);
-        $report->add(\common_report_Report::createInfo('Execution time : ' . $totalTime));
 
         return $report;
     }
@@ -188,5 +181,10 @@ class GenerateCsvFile extends ScriptAction
         }
         
         return $variablePolicy;
+    }
+
+    protected function showTime()
+    {
+        return true;
     }
 }
