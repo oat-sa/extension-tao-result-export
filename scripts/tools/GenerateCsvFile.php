@@ -20,12 +20,10 @@
 
 namespace oat\taoResultExports\scripts\tools;
 
-
-use oat\oatbox\action\Action;
+use oat\generis\model\OntologyAwareTrait;
 use oat\oatbox\extension\script\ScriptAction;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
 use oat\taoResultExports\model\export\AllBookletsExport;
-use \common_report_Report as Report;
 
 /**
  * Class GenerateCsvFile
@@ -35,6 +33,7 @@ use \common_report_Report as Report;
  */
 class GenerateCsvFile extends ScriptAction
 {
+    use OntologyAwareTrait;
 
     protected function provideDescription()
     {
@@ -77,6 +76,11 @@ class GenerateCsvFile extends ScriptAction
                 'longPrefix' => 'prefix',
                 'description' => 'Prefix of the file to export'
             ],
+            'daily' => [
+                'longPrefix' => 'daily',
+                'flag' => true,
+                'description' => 'Split result exports by day'
+            ],
 
         ];
     }
@@ -94,14 +98,13 @@ class GenerateCsvFile extends ScriptAction
     {
         $delivery = $this->getOption('delivery');
 
-        
         if (is_null($delivery) || strtolower($delivery) === 'all'){
             $deliveries = DeliveryAssemblyService::singleton()->getRootClass()->getInstances(true);
         } else {
             $deliveries = [];
             $explodedDeliveries = explode(',', $delivery);
             foreach($explodedDeliveries as $delivery){
-                  $deliveries[] = new \core_kernel_classes_Resource($delivery);
+                  $deliveries[] = $this->getResource($delivery);
             }
         }
         
@@ -131,24 +134,38 @@ class GenerateCsvFile extends ScriptAction
 
         
         // Param 5: Raw mode.
-        $rawMode = $this->getOption('raw');
-        if (is_null($rawMode) === false) {
-            $bookletExporter->addAlternateMissingDataEnconding(AllBookletsExport::NOT_RESPONDED, '');
+        if ($this->hasOption('raw')) {
+            $bookletExporter->addAlternateMissingDataEnconding($bookletExporter->getOption(AllBookletsExport::NOT_RESPONDED_OPTION), '');
         }
-        
-        $exportReport = $bookletExporter->export();
 
+        // Param 6: split export by day
+        if (!$this->hasOption('daily')) {
+            $exportReport = $bookletExporter->export();
+        } else {
+            $exportReport = $bookletExporter->dailyExport();
+        }
 
         $report = new \common_report_Report(
             \common_report_Report::TYPE_INFO,
-            'Writing file : '.$bookletExporter->getFilename() . PHP_EOL . 'for deliveries : '.implode(',', $deliveries)
+            'Exporting deliveries : '. PHP_EOL . implode(PHP_EOL, array_map(function($d) {
+                return $d->getUri() . ' => ' . $d->getLabel();
+            }, $deliveries))
         );
         
         $report->add($exportReport);
 
         return $report;
     }
-    
+
+    protected function formatTime($s)
+    {
+        $h = floor($s / 3600);
+        $m = floor(($s / 60) % 60);
+        $s = $s % 60;
+
+        return "${h}h ${m}m ${s}s";
+    }
+
     private static function transformStringVariablePolicyIntoConstant($strVariablePolicy)
     {
         $variablePolicy = AllBookletsExport::VARIABLE_POLICY_ALL;
@@ -164,5 +181,10 @@ class GenerateCsvFile extends ScriptAction
         }
         
         return $variablePolicy;
+    }
+
+    protected function showTime()
+    {
+        return true;
     }
 }

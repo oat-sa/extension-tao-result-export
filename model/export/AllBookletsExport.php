@@ -20,10 +20,12 @@
 
 namespace oat\taoResultExports\model\export;
 
+use oat\dtms\DateTime;
+use oat\generis\model\OntologyAwareTrait;
 use oat\oatbox\filesystem\File;
 use oat\oatbox\filesystem\FileSystemService;
 use oat\oatbox\service\ConfigurableService;
-use oat\oatbox\service\ServiceManager;
+use oat\taoDelivery\model\execution\DeliveryExecution;
 use oat\taoDelivery\model\execution\ServiceProxy;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
 use oat\taoResultServer\models\classes\ResultManagement;
@@ -33,14 +35,17 @@ use qtism\data\ExtendedAssessmentItemRef;
 use qtism\data\state\OutcomeDeclaration;
 use qtism\data\state\ResponseDeclaration;
 use qtism\data\storage\php\PhpDocument;
-use Zend\ServiceManager\ServiceLocatorAwareInterface;
-use Zend\ServiceManager\ServiceLocatorAwareTrait;
 
 class AllBookletsExport extends ConfigurableService
 {
-    use ServiceLocatorAwareTrait;
+    use OntologyAwareTrait;
 
     const SERVICE_ID = 'taoResultExports/BookletsExport';
+
+    /**
+     * If the export is daily, this option is the number of day to export
+     */
+    const OPTION_NUMBER_OF_DAILY_EXPORT = 'numberOfDayToExport';
 
     const IDENTIFIER_STRATEGY_ITEMREFIDENTIFIER = 0;
     const IDENTIFIER_STRATEGY_TITLE = 1;
@@ -97,6 +102,8 @@ class AllBookletsExport extends ConfigurableService
     
     private $globalAlternateMissingDataEncodings = [];
 
+    private $choiceMultipleTypeByDeliveries;
+
     /**
      * @var array
      */
@@ -108,13 +115,25 @@ class AllBookletsExport extends ConfigurableService
     private $prefix;
 
     /**
+     * The resource to handle the temporary file
+     *
+     * @var resource
+     */
+    protected $exportFile;
+
+    /**
      * Filesystem File to manage exported file storage
      *
      * @var File
      */
-    protected $exportFile;
-    
     protected $flySystemFile;
+
+    /**
+     * If the export is split by day then $dayToExport is the current export date
+     *
+     * @var string
+     */
+    protected $dayToExport = null;
 
     /**
      * @param string $identifierStrategy
@@ -162,6 +181,7 @@ class AllBookletsExport extends ConfigurableService
      *
      * @return \common_report_Report
      *
+     * @throws \common_Exception
      * @throws \common_exception_Error
      * @throws \common_exception_NotFound
      * @throws \qtism\data\storage\php\PhpStorageException
@@ -169,7 +189,6 @@ class AllBookletsExport extends ConfigurableService
     public function export()
     {
         $report = \common_report_Report::createSuccess();
-        $startTime = microtime(true);
 
         // Initialize temporary file.
         $tmpLocation = tempnam(sys_get_temp_dir(), 'invalsiexport');
@@ -186,34 +205,75 @@ class AllBookletsExport extends ConfigurableService
             $report->setMessage('Some errors occurred during export :');
         }
 
-        $endTime = microtime(true);
-        $totalTime = self::formatTime($endTime - $startTime);
-
         $rows = $rowsReport->getData();
-        $report->setMessage("${rows} row(s) exported in ${totalTime}.");
-        
-        // Write as stream and close temporary file.
-        $filename = $this->prefix. date('His') .'.csv';
-        $this->flySystemFile = $this->getServiceLocator()
-            ->get(FileSystemService::SERVICE_ID)
-            ->getDirectory(self::FILESYSTEM_ID)
-            ->getFile(date('Y_m_d') . gethostname() .'/'. $filename);
-            
-        rewind($this->exportFile);
-        $this->flySystemFile->write($this->exportFile);
-        
+        if ($rows == 0) {
+            $report->setMessage('No row to export for the given filters.');
+        } else {
+            // Write as stream and close temporary file.
+            $exportFile = $this->createExportFile();
+            $report->setMessage($rows . ' row(s) exported to ' . $exportFile->getPrefix() . '.');
+            rewind($this->exportFile);
+            $exportFile->write($this->exportFile);
+        }
+
         fclose($this->exportFile);
         unlink($tmpLocation);
-        
+
         return $report;
     }
 
     /**
-     * @return \oat\oatbox\filesystem\File
+     * Export results by day.
+     *
+     * Foreach number of days (from config) export a csv file
+     *
+     * @return \common_report_Report
      */
-    public function getFile()
+    public function dailyExport()
     {
-        return $this->flySystemFile;
+        $numberOfDayToExport = $this->hasOption(self::OPTION_NUMBER_OF_DAILY_EXPORT)
+            ? $this->getOption(self::OPTION_NUMBER_OF_DAILY_EXPORT)
+            : 3;
+
+        $currentDate = new \DateTime();
+        $interval = new \DateInterval('P1D');
+        $report = \common_report_Report::createInfo('Exporting results for the last ' . $numberOfDayToExport . 'day(s):');
+
+        for ($i=0; $i<$numberOfDayToExport; $i++) {
+            try {
+                $currentDate->sub($interval);
+                $this->dayToExport = $currentDate->format('Y-m-d');
+                $subReport = \common_report_Report::createInfo('About export of day ' . $this->dayToExport . '...');
+                $subReport->add($this->export());
+                $report->add($subReport);
+            } catch (\Exception $e) {
+                $report->setType(\common_report_Report::TYPE_ERROR);
+                $report->setMessage('Some errors occurred during export : ' . $e->getMessage());
+            }
+        }
+
+        return $report;
+    }
+
+    /**
+     * Create the filename for the export
+     *
+     * If there is a daily mode then add the date as subfolder
+     *
+     * @return mixed
+     */
+    protected function createExportFile()
+    {
+        $directory = date('Y_m_d') . DIRECTORY_SEPARATOR . gethostname() . DIRECTORY_SEPARATOR;
+        if (!is_null($this->dayToExport)) {
+            $directory .= $this->dayToExport . DIRECTORY_SEPARATOR;
+        }
+        $filename = $this->prefix. date('His') .'.csv';
+
+        return $this->getServiceLocator()
+            ->get(FileSystemService::SERVICE_ID)
+            ->getDirectory(self::FILESYSTEM_ID)
+            ->getFile($directory . $filename);
     }
 
     /**
@@ -230,7 +290,7 @@ class AllBookletsExport extends ConfigurableService
 
 
             /** @var \tao_models_classes_service_FileStorage $storageService */
-            $storageService = $this->getServiceManager()->get(\tao_models_classes_service_FileStorage::SERVICE_ID);
+            $storageService = $this->getServiceLocator()->get(\tao_models_classes_service_FileStorage::SERVICE_ID);
 
             foreach ($this->deliveries as $delivery) {
                 $this->assessmentItemRefIdentifierMapping[$delivery->getUri()] = [];
@@ -241,7 +301,7 @@ class AllBookletsExport extends ConfigurableService
                 $this->matchTypeByDeliveries[$deliveryUri] = [];
                 $this->hottextTypeByDeliveries[$deliveryUri] = [];
                 $this->choiceTypeByDeliveries[$deliveryUri] = [];
-                $directories = $delivery->getPropertyValues(new \core_kernel_classes_Property(DeliveryAssemblyService::PROPERTY_DELIVERY_DIRECTORY));
+                $directories = $delivery->getPropertyValues($this->getProperty(DeliveryAssemblyService::PROPERTY_DELIVERY_DIRECTORY));
                 
                 foreach ($directories as $directory) {
                     $dir = $storageService->getDirectoryById($directory);
@@ -476,138 +536,145 @@ class AllBookletsExport extends ConfigurableService
         /** @var \core_kernel_classes_Resource $delivery */
         foreach($this->deliveries as $delivery){
             $deliveryUri = $delivery->getUri();
-            $storage = $this->getServiceManager()->get(ResultServerService::SERVICE_ID)->getResultStorage($delivery);
+            $storage = $this->getServiceLocator()->get(ResultServerService::SERVICE_ID)->getResultStorage($delivery);
 
-            if($storage instanceof ResultManagement){
-                $results = $storage->getResultByDelivery([$deliveryUri]);
-                // get each row and write it to the csv
+            if(!$storage instanceof ResultManagement) {
+                continue;
+            }
 
-                foreach($results as $result){
-                    $execution = $execution = ServiceProxy::singleton()->getDeliveryExecution($result['deliveryResultIdentifier']);
-                    $row = array();
+            $results = $storage->getResultByDelivery([$deliveryUri]);
+            // get each row and write it to the csv
 
-                    $user = new \core_kernel_classes_Resource($execution->getUserIdentifier());
-                    $row['ID'] = $user->getLabel();
-                    $row['IDFORM'] = $delivery->getLabel();
-                    $row['STARTTIME'] = $this->cleanTimestamp($execution->getStartTime());
-                    $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : ''; 
+            foreach($results as $result){
+                /** @var DeliveryExecution $execution */
+                $execution = $execution = $this->getServiceLocator()->get(ServiceProxy::SERVICE_ID)->getDeliveryExecution($result['deliveryResultIdentifier']);
+                $row = array();
 
-                    $callIds = $storage->getRelatedItemCallIds($execution->getIdentifier());
-                    foreach ($callIds as $callId) {
-                        
-                        $itemResults = $storage->getVariables($callId);
-                        $splitCallId = explode('#', $callId);
-                        $itemIdentifier = explode('.', $splitCallId[1]);
-                        $itemIdentifier = $this->assessmentItemRefIdentifierMapping[$deliveryUri][$itemIdentifier[1]];
-                        
-                        foreach ($itemResults as $itemResult) {
-                            $itemResult = array_pop($itemResult);
-                            /** @var \taoResultServer_models_classes_Variable $variable */
-                            $variable = $itemResult->variable;
-                            $headerIdentifier = $itemIdentifier . '-' . $variable->getIdentifier();
-                            
-                            // Deal with variable policy...
-                            if (($variable instanceof \taoResultServer_models_classes_ResponseVariable && $this->variablePolicy === self::VARIABLE_POLICY_OUTCOME) ||
-                                ($variable instanceof \taoResultServer_models_classes_OutcomeVariable && $this->variablePolicy === self::VARIABLE_POLICY_RESPONSE) ||
-                                $this->isVariableNameBlacklisted($variable->getIdentifier(), $headerIdentifier)) {
-                                continue;
+                $startime = $this->cleanTimestamp($execution->getStartTime());
+                if (!is_null($this->dayToExport)  && $this->getEpochDay($startime) != $this->dayToExport) {
+                    continue;
+                }
+
+                $user = $this->getResource($execution->getUserIdentifier());
+                $row['ID'] = $user->getLabel();
+                $row['IDFORM'] = $delivery->getLabel();
+                $row['STARTTIME'] = $startime;
+                $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
+
+                $callIds = $storage->getRelatedItemCallIds($execution->getIdentifier());
+                foreach ($callIds as $callId) {
+
+                    $itemResults = $storage->getVariables($callId);
+                    $splitCallId = explode('#', $callId);
+                    $itemIdentifier = explode('.', $splitCallId[1]);
+                    $itemIdentifier = $this->assessmentItemRefIdentifierMapping[$deliveryUri][$itemIdentifier[1]];
+
+                    foreach ($itemResults as $itemResult) {
+                        $itemResult = array_pop($itemResult);
+                        /** @var \taoResultServer_models_classes_Variable $variable */
+                        $variable = $itemResult->variable;
+                        $headerIdentifier = $itemIdentifier . '-' . $variable->getIdentifier();
+
+                        // Deal with variable policy...
+                        if (($variable instanceof \taoResultServer_models_classes_ResponseVariable && $this->variablePolicy === self::VARIABLE_POLICY_OUTCOME) ||
+                            ($variable instanceof \taoResultServer_models_classes_OutcomeVariable && $this->variablePolicy === self::VARIABLE_POLICY_RESPONSE) ||
+                            $this->isVariableNameBlacklisted($variable->getIdentifier(), $headerIdentifier)) {
+                            continue;
+                        }
+
+                        // The variable has to be exported!
+
+                        if (isset($this->variablesByDeliveries[$deliveryUri]) && in_array($headerIdentifier, $this->variablesByDeliveries[$deliveryUri])){
+                            // Not modified variable header.
+                            $tmpVal = $this->formatVariable($variable);
+
+                            // choiceInteraction (single cardinality), inlineChoiceInteraction.
+                            if((isset($this->choiceTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->choiceTypeByDeliveries[$deliveryUri]))) &&
+                                ($index = array_search($tmpVal, $this->choiceTypeByDeliveries[$deliveryUri][$headerIdentifier])) !== false) {
+
+                                $row[$headerIdentifier] = $index + 1;
+                            } else {
+                                // Default response variable structure (textEntry, extendedTextEntry)
+                                $row[$headerIdentifier] = $tmpVal;
                             }
-                            
-                            // The variable has to be exported!
-                            
-                            if (isset($this->variablesByDeliveries[$deliveryUri]) && in_array($headerIdentifier, $this->variablesByDeliveries[$deliveryUri])){
-                                // Not modified variable header.
-                                $tmpVal = $this->formatVariable($variable);
-                                
-                                // choiceInteraction (single cardinality), inlineChoiceInteraction.
-                                if((isset($this->choiceTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->choiceTypeByDeliveries[$deliveryUri]))) &&
-                                    ($index = array_search($tmpVal, $this->choiceTypeByDeliveries[$deliveryUri][$headerIdentifier])) !== false) {
-                                    
-                                    $row[$headerIdentifier] = $index + 1;
-                                } else {
-                                    // Default response variable structure (textEntry, extendedTextEntry)
-                                    $row[$headerIdentifier] = $tmpVal;
-                                }
-                            } elseif (isset($this->matchTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->matchTypeByDeliveries[$deliveryUri]))) {
-                                // matchInteraction, gapMatchInteraction.
-                                $this->setColumnTo($row, $this->variablesByDeliveries[$deliveryUri], $headerIdentifier);
-                                
-                                $tmpVal = $this->formatVariable($variable);
-                                $val = \taoQtiCommon_helpers_Utils::toQtiDatatype('multiple', 'pair', $tmpVal);
-                                $alpha = range('a', 'z');
-                                
-                                if ($val) {
-                                    if ($this->matchTypeByDeliveries[$deliveryUri][$headerIdentifier] !== self::MATCH_TYPE_MATRIX) {
-                                        foreach ($val as $v) {
-                                            // Column or row strategy.
-                                            $cmp = ($this->matchTypeByDeliveries[$deliveryUri][$headerIdentifier] === self::MATCH_TYPE_COLUMN) ? $v->getFirst() : $v->getSecond();
-                                            $set = ($this->matchTypeByDeliveries[$deliveryUri][$headerIdentifier] === self::MATCH_TYPE_COLUMN) ? $v->getSecond() : $v->getFirst();
-                                            
-                                            $matchHeaderIdentifier = $headerIdentifier . '-' . $alpha[AllBookletsExportUtils::matchSetIndex($cmp, $this->matchSetsByDeliveries[$deliveryUri][$headerIdentifier])];
-                                            $row[$matchHeaderIdentifier] = AllBookletsExportUtils::matchSetIndex($set, $this->matchSetsByDeliveries[$deliveryUri][$headerIdentifier]) + 1;
-                                        }
-                                    } else {
-                                        // Matrix strategy.
-                                        foreach ($val as $v) {
-                                            $alpha1 = $alpha[AllBookletsExportUtils::matchSetIndex($v->getSecond(), $this->matchSetsByDeliveries[$deliveryUri][$headerIdentifier])];
-                                            $alpha2 = $alpha[AllBookletsExportUtils::matchSetIndex($v->getFirst(), $this->matchSetsByDeliveries[$deliveryUri][$headerIdentifier])];
-                                            
-                                            $matchHeaderIdentifier = "${headerIdentifier}-{$alpha1}-${alpha2}";
-                                            $row[$matchHeaderIdentifier] = '1';
-                                        }
-                                    }
-                                }
-                            } elseif (isset($this->hottextTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->hottextTypeByDeliveries[$deliveryUri]))) {
-                                // hottextInteraction.
-                                $this->setColumnTo($row, $this->variablesByDeliveries[$deliveryUri], $headerIdentifier);
-                                
-                                $tmpVal = $this->formatVariable($variable);
-                                $val = \taoQtiCommon_helpers_Utils::toQtiDatatype('multiple', 'identifier', $tmpVal);
-                                
-                                if ($val) {
-                                    foreach ($val as $v) {
-                                        $v = trim($v->getValue(), "'");
-                                        if (in_array($headerIdentifier . '-' . $v, $this->variablesByDeliveries[$deliveryUri])) {
-                                            $row[$headerIdentifier . '-' . $v] = '1';
-                                        }
-                                    }
-                                }
-                            } elseif (isset($this->orderTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->orderTypeByDeliveries[$deliveryUri]))) {
-                                // orderInteraction.
-                                $this->setColumnTo($row, $this->variablesByDeliveries[$deliveryUri], $headerIdentifier);
-                                $tmpVal = $this->formatVariable($variable);
-                                $val = \taoQtiCommon_helpers_Utils::toQtiDatatype('multiple', 'identifier', $tmpVal);
+                        } elseif (isset($this->matchTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->matchTypeByDeliveries[$deliveryUri]))) {
+                            // matchInteraction, gapMatchInteraction.
+                            $this->setColumnTo($row, $this->variablesByDeliveries[$deliveryUri], $headerIdentifier);
 
-                                if ($val) {
-                                    
-                                    for ($j = 0; $j < count($val); $j++) {
-                                        $v = trim($val[$j]->getValue(), "'");
-                                        
-                                        if (in_array($headerIdentifier . '-' . $v, $this->variablesByDeliveries[$deliveryUri])) {
-                                            $row[$headerIdentifier . '-' . $v] = $j + 1;
-                                        }
+                            $tmpVal = $this->formatVariable($variable);
+                            $val = \taoQtiCommon_helpers_Utils::toQtiDatatype('multiple', 'pair', $tmpVal);
+                            $alpha = range('a', 'z');
+
+                            if ($val) {
+                                if ($this->matchTypeByDeliveries[$deliveryUri][$headerIdentifier] !== self::MATCH_TYPE_MATRIX) {
+                                    foreach ($val as $v) {
+                                        // Column or row strategy.
+                                        $cmp = ($this->matchTypeByDeliveries[$deliveryUri][$headerIdentifier] === self::MATCH_TYPE_COLUMN) ? $v->getFirst() : $v->getSecond();
+                                        $set = ($this->matchTypeByDeliveries[$deliveryUri][$headerIdentifier] === self::MATCH_TYPE_COLUMN) ? $v->getSecond() : $v->getFirst();
+
+                                        $matchHeaderIdentifier = $headerIdentifier . '-' . $alpha[AllBookletsExportUtils::matchSetIndex($cmp, $this->matchSetsByDeliveries[$deliveryUri][$headerIdentifier])];
+                                        $row[$matchHeaderIdentifier] = AllBookletsExportUtils::matchSetIndex($set, $this->matchSetsByDeliveries[$deliveryUri][$headerIdentifier]) + 1;
+                                    }
+                                } else {
+                                    // Matrix strategy.
+                                    foreach ($val as $v) {
+                                        $alpha1 = $alpha[AllBookletsExportUtils::matchSetIndex($v->getSecond(), $this->matchSetsByDeliveries[$deliveryUri][$headerIdentifier])];
+                                        $alpha2 = $alpha[AllBookletsExportUtils::matchSetIndex($v->getFirst(), $this->matchSetsByDeliveries[$deliveryUri][$headerIdentifier])];
+
+                                        $matchHeaderIdentifier = "${headerIdentifier}-{$alpha1}-${alpha2}";
+                                        $row[$matchHeaderIdentifier] = '1';
+                                    }
+                                }
+                            }
+                        } elseif (isset($this->hottextTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->hottextTypeByDeliveries[$deliveryUri]))) {
+                            // hottextInteraction.
+                            $this->setColumnTo($row, $this->variablesByDeliveries[$deliveryUri], $headerIdentifier);
+
+                            $tmpVal = $this->formatVariable($variable);
+                            $val = \taoQtiCommon_helpers_Utils::toQtiDatatype('multiple', 'identifier', $tmpVal);
+
+                            if ($val) {
+                                foreach ($val as $v) {
+                                    $v = trim($v->getValue(), "'");
+                                    if (in_array($headerIdentifier . '-' . $v, $this->variablesByDeliveries[$deliveryUri])) {
+                                        $row[$headerIdentifier . '-' . $v] = '1';
+                                    }
+                                }
+                            }
+                        } elseif (isset($this->orderTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->orderTypeByDeliveries[$deliveryUri]))) {
+                            // orderInteraction.
+                            $this->setColumnTo($row, $this->variablesByDeliveries[$deliveryUri], $headerIdentifier);
+                            $tmpVal = $this->formatVariable($variable);
+                            $val = \taoQtiCommon_helpers_Utils::toQtiDatatype('multiple', 'identifier', $tmpVal);
+
+                            if ($val) {
+
+                                for ($j = 0; $j < count($val); $j++) {
+                                    $v = trim($val[$j]->getValue(), "'");
+
+                                    if (in_array($headerIdentifier . '-' . $v, $this->variablesByDeliveries[$deliveryUri])) {
+                                        $row[$headerIdentifier . '-' . $v] = $j + 1;
                                     }
                                 }
                             }
                         }
                     }
-
-                    if (empty($row)) {
-                        $report->setType(\common_report_Report::TYPE_ERROR);
-                        $report->setMessage('Impossible to get row for theses delivery ' . $delivery . 'and execution ' . $execution->getIdentifier());
-                        return $report;
-                    }
-                    
-                    $this->fillRow($row, $deliveryUri);
-                    $this->rowPostProcessing($row, $deliveryUri);
-                    
-                    $this->writeToCsv($row);
-                    
-                    $i++;
-                    $exportedResultsCount++;
                 }
-            }
 
+                if (empty($row)) {
+                    $report->setType(\common_report_Report::TYPE_ERROR);
+                    $report->setMessage('Impossible to get row for theses delivery ' . $delivery . 'and execution ' . $execution->getIdentifier());
+                    return $report;
+                }
+
+                $this->fillRow($row, $deliveryUri);
+                $this->rowPostProcessing($row, $deliveryUri);
+
+                $this->writeToCsv($row);
+
+                $i++;
+                $exportedResultsCount++;
+            }
         }
         
         $report->setData($i);
@@ -651,15 +718,6 @@ class AllBookletsExport extends ConfigurableService
         if (fputcsv($this->exportFile, $row) === false) {
             \common_Logger::w('Fail to write in the csv file : ' . implode(',', $row));
         }
-    }
-
-    /**
-     * Get the filename
-     * @return string
-     */
-    public function getFilename()
-    {
-        return $this->flySystemFile->getPrefix();
     }
     
     /**
@@ -811,8 +869,7 @@ class AllBookletsExport extends ConfigurableService
             case self::IDENTIFIER_STRATEGY_ITEMREFIDENTIFIER:
                 return $assessmentItemRef->getIdentifier();
                 break;
-            
-            // default = 'itemRef'
+
             default:
                 return $assessmentItemRef->getIdentifier();
         }
@@ -822,6 +879,18 @@ class AllBookletsExport extends ConfigurableService
     {
         $ts = explode(' ', $ts);
         return $ts[1];
+    }
+
+    /**
+     * Extract the day of an epoch timestamp
+     *
+     * @param $epoch
+     * @return string Formatted as Y-m-d
+     */
+    private function getEpochDay($epoch)
+    {
+        $dt = new DateTime("@$epoch");
+        return $dt->format('Y-m-d');
     }
     
     protected function isVariableNameBlacklisted($variableName, $fullVariableName = '')
@@ -833,15 +902,6 @@ class AllBookletsExport extends ConfigurableService
 
             return $blackListed;
         }
-    }
-    
-    private static function formatTime($s)
-    {
-        $h = floor($s / 3600);
-        $m = floor(($s / 60) % 60);
-        $s = $s % 60;
-        
-        return "${h}h ${m}m ${s}s";
     }
     
     public function addForcedItemIdentifier($deliveryUri, $assessmentItemRefIdentifier, $forcedIdentifier) {

@@ -24,7 +24,7 @@ return [
     'label' => 'Export Tools',
     'description' => 'Extension providing tools dedicated to operations.',
     'license' => 'GPL-2.0',
-    'version' => '0.0.1',
+    'version' => '0.1.0',
     'author' => 'Open Assessment Technologies',
     'requires' => [
         'generis' => '>=6.5.1',
