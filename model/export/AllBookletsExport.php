@@ -206,7 +206,7 @@ class AllBookletsExport extends ConfigurableService
         }
 
         $rows = $rowsReport->getData();
-        
+
         // Write as stream and close temporary file.
         $exportFile = $this->createExportFile();
         $report->setMessage($rows . ' row(s) exported to ' . $exportFile->getPrefix() . '.');
