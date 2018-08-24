@@ -206,15 +206,12 @@ class AllBookletsExport extends ConfigurableService
         }
 
         $rows = $rowsReport->getData();
-        if ($rows == 0) {
-            $report->setMessage('No row to export for the given filters.');
-        } else {
-            // Write as stream and close temporary file.
-            $exportFile = $this->createExportFile();
-            $report->setMessage($rows . ' row(s) exported to ' . $exportFile->getPrefix() . '.');
-            rewind($this->exportFile);
-            $exportFile->write($this->exportFile);
-        }
+        
+        // Write as stream and close temporary file.
+        $exportFile = $this->createExportFile();
+        $report->setMessage($rows . ' row(s) exported to ' . $exportFile->getPrefix() . '.');
+        rewind($this->exportFile);
+        $exportFile->write($this->exportFile);
 
         fclose($this->exportFile);
         unlink($tmpLocation);
