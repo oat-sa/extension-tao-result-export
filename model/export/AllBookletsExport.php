@@ -416,8 +416,10 @@ class AllBookletsExport extends ConfigurableService
                                         }
 
                                         if (isset($interactions['customInteraction'])) {
-                                            foreach (array_keys($interactions['customInteraction']) as $responseIdentifier) {
-                                                $this->addVariableToBlacklist($identifier . '-' . $responseIdentifier);
+                                            foreach ($interactions['customInteraction'] as $responseIdentifier => $customInteractionData) {
+                                                if (!isset($customInteractionData->typeIdentifier) || $customInteractionData->typeIdentifier === 'textReaderInteraction') {
+                                                    $this->addVariableToBlacklist($identifier . '-' . $responseIdentifier);
+                                                }
                                             }
                                         }
 
