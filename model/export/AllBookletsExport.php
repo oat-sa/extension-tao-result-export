@@ -46,16 +46,17 @@ class AllBookletsExport extends ConfigurableService
      * If the export is daily, this option is the number of day to export
      */
     const OPTION_NUMBER_OF_DAILY_EXPORT = 'numberOfDayToExport';
+    const OPTION_EXOTIC_VOCABULARY = 'exotic_vocabulary';
 
     const IDENTIFIER_STRATEGY_ITEMREFIDENTIFIER = 0;
     const IDENTIFIER_STRATEGY_TITLE = 1;
     const IDENTIFIER_STRATEGY_LABEL = 2;
     const IDENTIFIER_STRATEGY_IDENTIFIER = 3;
-    
+
     const VARIABLE_POLICY_ALL = 0;
     const VARIABLE_POLICY_RESPONSE = 1;
     const VARIABLE_POLICY_OUTCOME = 2;
-    
+
     const MATCH_TYPE_COLUMN = 0;
     const MATCH_TYPE_ROW = 1;
     const MATCH_TYPE_MATRIX = 2;
@@ -85,24 +86,29 @@ class AllBookletsExport extends ConfigurableService
     private $hottextTypeByDeliveries = [];
 
     private $choiceTypeByDeliveries = [];
-    
+
     private $orderTypeByDeliveries = [];
-    
+
     private $assessmentItemRefIdentifierMapping = [];
-    
+
     private $identifierStrategy;
-    
+
     private $variablePolicy = self::VARIABLE_POLICY_ALL;
-    
+
     private $variableBlacklist = [];
-    
+
     private $forcedItemIdentifiers = [];
-    
+
     private $alternateMissingDataEncodings = [];
-    
+
     private $globalAlternateMissingDataEncodings = [];
 
     private $choiceMultipleTypeByDeliveries;
+
+    /**
+     * @var array
+     */
+    private $textEntryInteractionsByDeliveries = [];
 
     /**
      * @var array
@@ -135,6 +141,14 @@ class AllBookletsExport extends ConfigurableService
      */
     protected $dayToExport = null;
 
+    private $allowExoticCharactersExport;
+
+    /**
+     * @var []
+     */
+    private $exoticCharactersReplacementTable = [];
+    private $exoticCharacters = [];
+
     /**
      * @param string $identifierStrategy
      */
@@ -160,12 +174,12 @@ class AllBookletsExport extends ConfigurableService
     }
 
 
-    
+
     public function setVariablePolicy($variablePolicy)
     {
         $this->variablePolicy = $variablePolicy;
     }
-    
+
     public function setVariableBlacklist(array $blacklist)
     {
         $this->variableBlacklist = $blacklist;
@@ -291,7 +305,7 @@ class AllBookletsExport extends ConfigurableService
 
             foreach ($this->deliveries as $delivery) {
                 $this->assessmentItemRefIdentifierMapping[$delivery->getUri()] = [];
-                
+
                 //Get item list
                 $deliveryUri = $delivery->getUri();
                 $this->variablesByDeliveries[$deliveryUri] = [];
@@ -299,11 +313,11 @@ class AllBookletsExport extends ConfigurableService
                 $this->hottextTypeByDeliveries[$deliveryUri] = [];
                 $this->choiceTypeByDeliveries[$deliveryUri] = [];
                 $directories = $delivery->getPropertyValues($this->getProperty(DeliveryAssemblyService::PROPERTY_DELIVERY_DIRECTORY));
-                
+
                 foreach ($directories as $directory) {
                     $dir = $storageService->getDirectoryById($directory);
                     $files = $dir->getFlyIterator(3);
-                    
+
                     /** @var File $file */
                     foreach ($files as $file) {
                         if ($file->getBasename() === 'compact-test.php') {
@@ -327,12 +341,24 @@ class AllBookletsExport extends ConfigurableService
                                         $identifier = $this->getAssessmentItemRefIdentifier($delivery, $component, $itemJson, $this->identifierStrategy);
                                         $this->assessmentItemRefIdentifierMapping[$delivery->getUri()][$component->getIdentifier()] = $identifier;
                                         $interactions = AllBookletsExportUtils::getInteractions($itemJson);
-                                        
+
+                                        if (isset($interactions['textEntryInteraction'])) {
+                                            foreach ($interactions['textEntryInteraction'] as $responseIdentifier => $jsonInteraction) {
+                                                $this->textEntryInteractionsByDeliveries[$deliveryUri][] = $identifier . '-' . $responseIdentifier;
+                                            }
+                                        }
+
+                                        if (isset($interactions['extendedTextInteraction'])) {
+                                            foreach ($interactions['extendedTextInteraction'] as $responseIdentifier => $jsonInteraction) {
+                                                $this->textEntryInteractionsByDeliveries[$deliveryUri][] = $identifier . '-' . $responseIdentifier;
+                                            }
+                                        }
+
                                         if (isset($interactions['matchInteraction'])) {
                                             foreach ($interactions['matchInteraction'] as $responseIdentifier => $jsonInteraction) {
                                                 $headerResponseIdentifier = $identifier . '-' . $responseIdentifier;
                                                 $matchSets = AllBookletsExportUtils::getMatchSets($jsonInteraction, $responseIdentifier);
-                                                
+
                                                 if (AllBookletsExportUtils::isMatchByColumn($jsonInteraction)) {
                                                     // By column strategy.
                                                     $strategy = self::MATCH_TYPE_COLUMN;
@@ -347,38 +373,38 @@ class AllBookletsExport extends ConfigurableService
                                                     $strategy = self::MATCH_TYPE_MATRIX;
                                                     $choices[$identifier . $responseIdentifier] = $matchSets;
                                                 }
-                                                
+
                                                 $this->matchTypeByDeliveries[$deliveryUri][$headerResponseIdentifier] = $strategy;
                                                 $this->matchSetsByDeliveries[$deliveryUri][$headerResponseIdentifier] = $matchSets;
 
                                             }
                                         }
-                                        
+
                                         if (isset($interactions['gapMatchInteraction'])) {
                                             foreach ($interactions['gapMatchInteraction'] as $responseIdentifier => $jsonInteraction) {
                                                 $headerResponseIdentifier = $identifier . '-' . $responseIdentifier;
                                                 $this->matchTypeByDeliveries[$deliveryUri][$headerResponseIdentifier] = self::MATCH_TYPE_ROW;
-                                                
+
                                                 $matchSets = AllBookletsExportUtils::getMatchSets($jsonInteraction, $responseIdentifier);
                                                 $this->matchSetsByDeliveries[$deliveryUri][$headerResponseIdentifier] = $matchSets;
                                                 $choices[$identifier . $responseIdentifier] = $matchSets[0];
                                             }
                                         }
-                                        
+
                                         if (isset($interactions['hottextInteraction'])) {
                                             foreach ($interactions['hottextInteraction'] as $responseIdentifier => $jsonInteraction) {
                                                 $headerResponseIdentifier = $identifier . '-' . $responseIdentifier;
                                                 $this->hottextTypeByDeliveries[$deliveryUri][$headerResponseIdentifier] = true;
-                                                
+
                                                 $matchSets = AllBookletsExportUtils::getMatchSets($jsonInteraction, $responseIdentifier);
                                                 $choices[$identifier . $responseIdentifier] = $matchSets[0];
                                             }
                                         }
-                                        
+
                                         if (isset($interactions['choiceInteraction'])) {
                                             foreach ($interactions['choiceInteraction'] as $responseIdentifier => $jsonInteraction) {
                                                 $headerResponseIdentifier = $identifier . '-' . $responseIdentifier;
-                                                
+
                                                 if (isset($jsonInteraction->attributes->maxChoices) && $jsonInteraction->attributes->maxChoices !== 1) {
                                                     // Multiple cardinality (similar to hottext)
                                                     $this->hottextTypeByDeliveries[$deliveryUri][$headerResponseIdentifier] = true;
@@ -391,7 +417,7 @@ class AllBookletsExport extends ConfigurableService
                                                 }
                                             }
                                         }
-                                        
+
                                         if (isset($interactions['inlineChoiceInteraction'])) {
                                             foreach ($interactions['inlineChoiceInteraction'] as $responseIdentifier => $jsonInteraction) {
                                                 $headerResponseIdentifier = $identifier . '-' . $responseIdentifier;
@@ -399,7 +425,7 @@ class AllBookletsExport extends ConfigurableService
                                                 $this->choiceTypeByDeliveries[$deliveryUri][$headerResponseIdentifier] = $matchSets[0];
                                             }
                                         }
-                                        
+
                                         if (isset($interactions['orderInteraction'])) {
                                             foreach ($interactions['orderInteraction'] as $responseIdentifier => $jsonInteraction) {
                                                 $headerResponseIdentifier = $identifier . '-' . $responseIdentifier;
@@ -426,17 +452,17 @@ class AllBookletsExport extends ConfigurableService
                                         break;
                                     }
                                 }
-                                
+
                                 $outcomes = $component->getOutcomeDeclarations();
                                 $responses = $component->getResponseDeclarations();
-                                
+
                                 if ($this->variablePolicy === self::VARIABLE_POLICY_ALL || $this->variablePolicy === self::VARIABLE_POLICY_RESPONSE) {
                                     /** @var ResponseDeclaration $response */
                                     foreach ($responses as $response) {
                                         $headerResponseIdentifier = $identifier . '-' . $response->getIdentifier();
-                                        
+
                                         if ($this->isVariableNameBlacklisted($response->getIdentifier(), $headerResponseIdentifier) === false) {
-                                            
+
                                             if (isset($choices[$identifier . $response->getIdentifier()])) {
                                                 // Non default response variable structure (e.g. matchInteraction, gapMatchInteraction, ...)
                                                 if (isset($this->matchSetsByDeliveries[$deliveryUri][$headerResponseIdentifier]) && isset($this->matchTypeByDeliveries[$deliveryUri][$headerResponseIdentifier]) && $this->matchTypeByDeliveries[$deliveryUri][$headerResponseIdentifier] === self::MATCH_TYPE_MATRIX) {
@@ -445,7 +471,7 @@ class AllBookletsExport extends ConfigurableService
                                                     $matchSets = $this->matchSetsByDeliveries[$deliveryUri][$headerResponseIdentifier];
                                                     foreach ($matchSets[1] as $choiceId1) {
                                                         $alphaId1 = $alpha[AllBookletsExportUtils::matchSetIndex($choiceId1, $matchSets)];
-                                                        
+
                                                         foreach ($matchSets[0] as $choiceId2) {
                                                             $alphaId2 = $alpha[AllBookletsExportUtils::matchSetIndex($choiceId2, $matchSets)];
                                                             $this->variablesByDeliveries[$delivery->getUri()][] = "${headerResponseIdentifier}-${alphaId1}-${alphaId2}";
@@ -460,7 +486,7 @@ class AllBookletsExport extends ConfigurableService
                                                             $alpha = range('a', 'z');
                                                             $choiceId = $alpha[AllBookletsExportUtils::matchSetIndex($choiceId, [$this->choiceMultipleTypeByDeliveries[$deliveryUri][$headerResponseIdentifier]])];
                                                         }
-                                                        
+
                                                         $this->variablesByDeliveries[$delivery->getUri()][] = $headerResponseIdentifier . '-' . $choiceId;
                                                     }
                                                 }
@@ -529,7 +555,7 @@ class AllBookletsExport extends ConfigurableService
     {
 
         $report = \common_report_Report::createSuccess();
-        
+
         $exportedResultsCount = 0;
         $i = 0;
         /** @var \core_kernel_classes_Resource $delivery */
@@ -594,6 +620,9 @@ class AllBookletsExport extends ConfigurableService
                                 $row[$headerIdentifier] = $index + 1;
                             } else {
                                 // Default response variable structure (textEntry, extendedTextEntry)
+                                if (!$this->allowExoticCharactersExport && array_key_exists($deliveryUri, $this->textEntryInteractionsByDeliveries) && in_array($headerIdentifier, $this->textEntryInteractionsByDeliveries[$deliveryUri])) {
+                                    $tmpVal = $this->applyExoticFiltering($tmpVal);
+                                }
                                 $row[$headerIdentifier] = $tmpVal;
                             }
                         } elseif (isset($this->matchTypeByDeliveries[$deliveryUri]) && in_array($headerIdentifier, array_keys($this->matchTypeByDeliveries[$deliveryUri]))) {
@@ -675,7 +704,7 @@ class AllBookletsExport extends ConfigurableService
                 $exportedResultsCount++;
             }
         }
-        
+
         $report->setData($i);
 
         return $report;
@@ -692,12 +721,12 @@ class AllBookletsExport extends ConfigurableService
     private function writeToCsv(array $row, $isHeader = false)
     {
         // order the row to match the headers
-        
+
         if (!$isHeader) {
             // Prepare a result row to be written.
             $headers = $this->getHeaders();
             $newRow = [];
-            
+
             foreach($headers as $value) {
                 if (isset($row[$value])) {
                     $newRow[] = $row[$value];
@@ -705,9 +734,9 @@ class AllBookletsExport extends ConfigurableService
                     \common_Logger::w('column : ' . $value . ' is missing in row ' .implode(',', $row));
                 }
             }
-            
+
             $row = $newRow;
-            
+
         } else {
             // Prepare a header row to be written.
             $this->headerPostProcessing($row);
@@ -718,17 +747,17 @@ class AllBookletsExport extends ConfigurableService
             \common_Logger::w('Fail to write in the csv file : ' . implode(',', $row));
         }
     }
-    
+
     /**
      * Row Post-processing
-     * 
+     *
      * Sub-classes can override this method in order to apply some post-processing
      * on exported CSV rows before they are written.
-     * 
+     *
      * @param array $row A reference on an array representing the a CSV row to be written.
      * @param string $deliveryUri The URI of the $delivery the $row belongs to.
      * @return void
-     * 
+     *
      */
     protected function rowPostProcessing(array &$row, $deliveryUri)
     {
@@ -768,9 +797,9 @@ class AllBookletsExport extends ConfigurableService
 
     /**
      * Fill empty cells with correct placeholder.
-     * 
+     *
      * This method will fill empty cells with the appropriate missing data encoding values.
-     * 
+     *
      * @param array $row A reference to the array representing the row to fill.
      * @param string $deliveryUri The delivery that the test taker took.
      */
@@ -778,7 +807,7 @@ class AllBookletsExport extends ConfigurableService
     {
         $neededColumns = array();
         $emptyColumns = array();
-        
+
         foreach ($this->variablesByDeliveries as $delivery => $columns) {
             if ($delivery === $deliveryUri) {
                 // Columns that are related to $deliveryUri.
@@ -788,12 +817,12 @@ class AllBookletsExport extends ConfigurableService
                 $emptyColumns = array_merge($emptyColumns, $this->variablesByDeliveries[$delivery]);
             }
         }
-        
+
         foreach ($neededColumns as $column) {
             if (!in_array($column, array_keys($row))) {
                 $row[$column] = $this->determineMissingDataEncoding($this->getOption(self::NOT_ATTEMPTED_OPTION), $column);
             }
-            
+
             if ($row[$column] === '' || $row[$column] === '[]' || $row[$column] === '<>') {
                 $row[$column] = $this->determineMissingDataEncoding($this->getOption(self::NOT_RESPONDED_OPTION), $column);
             }
@@ -805,36 +834,36 @@ class AllBookletsExport extends ConfigurableService
             }
         }
     }
-    
+
     protected function determineMissingDataEncoding($code, $column)
     {
         if (isset($this->alternateMissingDataEncodings[$column]) === true && isset($this->alternateMissingDataEncodings[$column][$code]) === true) {
-            
+
             return $this->alternateMissingDataEncodings[$column][$code];
-            
+
         } elseif (isset($this->globalAlternateMissingDataEncodings[$code]) === true) {
-            
+
             return $this->globalAlternateMissingDataEncodings[$code];
-            
+
         } else {
-            
+
             return $code;
         }
     }
-    
+
     public function addAlternateMissingDataEnconding($originalCode, $newCode, $column = '')
     {
         if (empty($column) === false) {
             if (isset($this->alternateMissingDataEncodings[$column]) === false) {
                 $this->alternateMissingDataEncodings[$column] = [];
             }
-            
+
             $this->alternateMissingDataEncodings[$column][$originalCode] = $newCode;
         } else {
             $this->globalAlternateMissingDataEncodings[$originalCode] = $newCode;
         }
     }
-    
+
     private function setColumnTo(array &$row, array $columns, $headerIdentifier, $value = '') {
         foreach ($columns as $col) {
             if (preg_match('/^' . preg_quote($headerIdentifier) . '-/', $col) === 1) {
@@ -842,29 +871,29 @@ class AllBookletsExport extends ConfigurableService
             }
         }
     }
-    
+
     private function getAssessmentItemRefIdentifier(\core_kernel_classes_Resource $delivery, ExtendedAssessmentItemRef $assessmentItemRef, $itemJson,  $strategy = 'itemRef')
     {
         if (($forcedItemIdentifier = $this->getForcedItemIdentifier($delivery->getUri(), $assessmentItemRef->getIdentifier())) !== false) {
             return $forcedItemIdentifier;
         }
-        
+
         switch ($strategy) {
             case 'label':
             case self::IDENTIFIER_STRATEGY_LABEL:
                 return $itemJson->data->attributes->label;
                 break;
-                
+
             case 'title':
             case self::IDENTIFIER_STRATEGY_TITLE:
                 return $itemJson->data->attributes->title;
                 break;
-                
+
             case 'identifier':
             case self::IDENTIFIER_STRATEGY_IDENTIFIER:
                 return $itemJson->data->attributes->identifier;
                 break;
-                
+
             case self::IDENTIFIER_STRATEGY_ITEMREFIDENTIFIER:
                 return $assessmentItemRef->getIdentifier();
                 break;
@@ -873,7 +902,7 @@ class AllBookletsExport extends ConfigurableService
                 return $assessmentItemRef->getIdentifier();
         }
     }
-    
+
     private function cleanTimestamp($ts)
     {
         $ts = explode(' ', $ts);
@@ -891,7 +920,7 @@ class AllBookletsExport extends ConfigurableService
         $dt = new DateTime("@$epoch");
         return $dt->format('Y-m-d');
     }
-    
+
     protected function isVariableNameBlacklisted($variableName, $fullVariableName = '')
     {
         if ($this->isWhiteListed($fullVariableName)) {
@@ -902,11 +931,11 @@ class AllBookletsExport extends ConfigurableService
             return $blackListed;
         }
     }
-    
+
     public function addForcedItemIdentifier($deliveryUri, $assessmentItemRefIdentifier, $forcedIdentifier) {
         $this->forcedItemIdentifiers[$deliveryUri][$assessmentItemRefIdentifier] = $forcedIdentifier;
     }
-    
+
     private function getForcedItemIdentifier($deliveryUri, $assessmentItemRefIdentifier) {
         if (isset($this->forcedItemIdentifiers[$deliveryUri]) && isset($this->forcedItemIdentifiers[$deliveryUri][$assessmentItemRefIdentifier])) {
             return $this->forcedItemIdentifiers[$deliveryUri][$assessmentItemRefIdentifier];
@@ -914,18 +943,55 @@ class AllBookletsExport extends ConfigurableService
             return false;
         }
     }
-    
+
     private function isWhiteListed($fullVariableName) {
         $white = false;
-        
+
         foreach ($this->variableBlacklist as $vbl) {
-            
+
             if ($vbl === "*${fullVariableName}") {
                 $white = true;
                 break;
             }
         }
-        
+
         return $white;
+    }
+
+    /**
+     * @param boolean $allowExotic
+     */
+    public function setAllowExoticCharactersExport($allowExotic)
+    {
+        $this->allowExoticCharactersExport = $allowExotic;
+    }
+
+    /**
+     * @param string $tmpVal
+     * @return string
+     */
+    private function applyExoticFiltering($tmpVal)
+    {
+        return str_ireplace($this->getExoticVocabulary(), $this->getReplacement(), $tmpVal);
+    }
+
+    private function getExoticVocabulary()
+    {
+        if (empty($this->exoticCharacters) ) {
+            $this->exoticCharacters =  array_map(function ($ch) {
+                if (is_int($ch)){
+                    $ch = chr($ch);
+                }
+                return $ch;
+            }, $this->getOption(self::OPTION_EXOTIC_VOCABULARY));
+        }
+        return $this->exoticCharacters;
+    }
+
+    private function getReplacement(){
+        if (empty($this->exoticCharactersReplacementTable) ){
+            $this->exoticCharactersReplacementTable  = array_fill(0, count($this->getExoticVocabulary()), '');
+        }
+        return $this->exoticCharactersReplacementTable;
     }
 }
