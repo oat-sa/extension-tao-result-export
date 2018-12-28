@@ -22,12 +22,16 @@ namespace oat\taoResultExports\model\export;
 
 use oat\dtms\DateTime;
 use oat\generis\model\OntologyAwareTrait;
+use oat\generis\model\OntologyRdfs;
+use oat\generis\model\user\UserRdf;
 use oat\oatbox\filesystem\File;
 use oat\oatbox\filesystem\FileSystemService;
 use oat\oatbox\service\ConfigurableService;
+use oat\oatbox\user\User;
 use oat\taoDelivery\model\execution\DeliveryExecution;
 use oat\taoDelivery\model\execution\ServiceProxy;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
+use oat\taoLti\models\classes\user\UserService;
 use oat\taoResultServer\models\classes\ResultManagement;
 use oat\taoResultServer\models\classes\ResultServerService;
 use qtism\data\AssessmentTest;
@@ -282,7 +286,7 @@ class AllBookletsExport extends ConfigurableService
     private function getHeaders()
     {
         if (is_null($this->headers)) {
-            $headers = array('ID', 'IDFORM', 'STARTTIME', 'FINISHTIME');
+            $headers = array('ID', 'LOGIN', 'IDFORM', 'STARTTIME', 'FINISHTIME');
             $report = \common_report_Report::createSuccess();
 
 
@@ -529,7 +533,9 @@ class AllBookletsExport extends ConfigurableService
     {
 
         $report = \common_report_Report::createSuccess();
-        
+        /** @var UserService $userService */
+        $userService = $this->getServiceManager()->get(UserService::SERVICE_ID);
+
         $exportedResultsCount = 0;
         $i = 0;
         /** @var \core_kernel_classes_Resource $delivery */
@@ -554,8 +560,10 @@ class AllBookletsExport extends ConfigurableService
                     continue;
                 }
 
-                $user = $this->getResource($execution->getUserIdentifier());
-                $row['ID'] = $user->getLabel();
+                $user = $userService->getUserById($execution->getUserIdentifier());
+
+                $row['ID'] = $this->getUserId($user);
+                $row['LOGIN'] = $this->getUserLogin($user);
                 $row['IDFORM'] = $delivery->getLabel();
                 $row['STARTTIME'] = $startime;
                 $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
@@ -927,5 +935,19 @@ class AllBookletsExport extends ConfigurableService
         }
         
         return $white;
+    }
+
+    private function getUserLogin(User $user)
+    {
+        $login = $user->getPropertyValues(UserRdf::PROPERTY_LOGIN);
+        return array_shift($login) ?: '';
+    }
+
+    private function getUserId(User $user)
+    {
+        $label = $user->getPropertyValues(OntologyRdfs::RDFS_LABEL);
+
+        return array_shift($label) ?: '';
+
     }
 }
