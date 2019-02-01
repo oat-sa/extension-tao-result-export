@@ -82,6 +82,12 @@ class GenerateCsvFile extends ScriptAction
                 'description' => 'Split result exports by day'
             ],
 
+            'exotic' => [
+                'longPrefix' => 'exotic',
+                'flag' => true,
+                'description' => 'Allows export of exotic characters'
+            ],
+
         ];
     }
 
@@ -132,10 +138,13 @@ class GenerateCsvFile extends ScriptAction
             $bookletExporter->setVariableBlacklist(explode(',', $variableBlacklist));
         }
 
-        
         // Param 5: Raw mode.
         if ($this->hasOption('raw')) {
             $bookletExporter->addAlternateMissingDataEnconding($bookletExporter->getOption(AllBookletsExport::NOT_RESPONDED_OPTION), '');
+        }
+
+        if ($this->getOption('exotic')){
+            $bookletExporter->setAllowExoticCharactersExport($this->getOption('exotic'));
         }
 
         // Param 6: split export by day
