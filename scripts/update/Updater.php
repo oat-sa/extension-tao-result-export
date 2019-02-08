@@ -223,5 +223,7 @@ class Updater extends \common_ext_ExtensionUpdater
 
 
         }
+
+        $this->skip('0.2.0', '0.3.0');
     }
 }
