@@ -150,6 +150,13 @@ class AllBookletsExport extends ConfigurableService
     private $exoticCharacters = [];
 
     /**
+     * If set to false - there would be no timestamp in filename
+     *
+     * @var bool
+     */
+    private $allowTimestampInFilename = true;
+
+    /**
      * @param string $identifierStrategy
      */
     public function setIdentifierStrategy($identifierStrategy)
@@ -170,7 +177,11 @@ class AllBookletsExport extends ConfigurableService
      */
     public function setPrefix($prefix)
     {
-        $this->prefix = rtrim($prefix,'_').'_';;
+        if ($this->allowTimestampInFilename) {
+            $this->prefix = rtrim($prefix,'_').'_';
+        } else {
+            $this->prefix = rtrim($prefix,'_');
+        }
     }
 
 
@@ -279,7 +290,10 @@ class AllBookletsExport extends ConfigurableService
         if (!is_null($this->dayToExport)) {
             $directory .= $this->dayToExport . DIRECTORY_SEPARATOR;
         }
-        $filename = $this->prefix. date('His') .'.csv';
+
+        $postfix = $this->allowTimestampInFilename ? date('His') : '';
+
+        $filename = $this->prefix. $postfix .'.csv';
 
         return $this->getServiceLocator()
             ->get(FileSystemService::SERVICE_ID)
@@ -993,5 +1007,10 @@ class AllBookletsExport extends ConfigurableService
             $this->exoticCharactersReplacementTable  = array_fill(0, count($this->getExoticVocabulary()), '');
         }
         return $this->exoticCharactersReplacementTable;
+    }
+
+    public function setAllowTimestampInFilename($allowTimestamp = true)
+    {
+        $this->allowTimestampInFilename = $allowTimestamp;
     }
 }
