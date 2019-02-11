@@ -53,8 +53,6 @@ class Updater extends \common_ext_ExtensionUpdater
 
         $this->skip('0.1.0', '0.1.2');
 
-
-
         if ($this->isVersion('0.1.2') ){
             $bookletExporterService = $this->getServiceManager()->get(AllBookletsExport::SERVICE_ID);
             $vacbluary = [
@@ -220,8 +218,8 @@ class Updater extends \common_ext_ExtensionUpdater
             $bookletExporterService->setOption(AllBookletsExport::OPTION_EXOTIC_VOCABULARY, $vacbluary);
             $this->getServiceManager()->register(AllBookletsExport::SERVICE_ID, $bookletExporterService);
             $this->setVersion('0.2.0');
-
-
         }
+
+        $this->skip('0.2.0', '0.3.0');
     }
 }
