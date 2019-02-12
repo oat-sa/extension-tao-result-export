@@ -89,10 +89,10 @@ class GenerateCsvFile extends ScriptAction
             ],
 
             'withoutTimestamp' => [
-                'longprefix'    => 'without-timestamp',
+                'longPrefix'    => 'without-timestamp',
                 'prefix'        => 'wt',
                 'flag'          => true,
-                'description'   => "Setting this flag would mean that export file won't have timestamp postfix in filename",
+                'description'   => 'Setting this flag would mean that export file won\'t have timestamp postfix in filename',
                 'defaultValue'  => false,
                 'cast'          => 'boolean'
             ]
