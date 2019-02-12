@@ -298,10 +298,17 @@ class AllBookletsExport extends ConfigurableService
 
         $filename = $this->prefix. $postfix .'.csv';
 
-        return $this->getServiceLocator()
+        /** @var File $file */
+        $file = $this->getServiceLocator()
             ->get(FileSystemService::SERVICE_ID)
             ->getDirectory(self::FILESYSTEM_ID)
             ->getFile($directory . $filename);
+
+        if ($this->allowTimestampInFilename === false && $file->exists()) {
+            $file->delete();
+        }
+
+        return $file;
     }
 
     /**
