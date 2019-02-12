@@ -22,12 +22,15 @@ namespace oat\taoResultExports\model\export;
 
 use oat\dtms\DateTime;
 use oat\generis\model\OntologyAwareTrait;
+use oat\generis\model\OntologyRdfs;
 use oat\oatbox\filesystem\File;
 use oat\oatbox\filesystem\FileSystemService;
 use oat\oatbox\service\ConfigurableService;
+use oat\oatbox\user\User;
 use oat\taoDelivery\model\execution\DeliveryExecution;
 use oat\taoDelivery\model\execution\ServiceProxy;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
+use oat\taoLti\models\classes\user\UserService;
 use oat\taoResultServer\models\classes\ResultManagement;
 use oat\taoResultServer\models\classes\ResultServerService;
 use qtism\data\AssessmentTest;
@@ -567,14 +570,18 @@ class AllBookletsExport extends ConfigurableService
      */
     private function getRows()
     {
-
         $report = \common_report_Report::createSuccess();
+
+        /** @var UserService $userService */
+        $userService = $this->getServiceManager()->get(UserService::SERVICE_ID);
 
         $exportedResultsCount = 0;
         $i = 0;
         /** @var \core_kernel_classes_Resource $delivery */
         foreach($this->deliveries as $delivery){
             $deliveryUri = $delivery->getUri();
+
+            /** @var ResultManagement $storage */
             $storage = $this->getServiceLocator()->get(ResultServerService::SERVICE_ID)->getResultStorage($delivery);
 
             if(!$storage instanceof ResultManagement) {
@@ -586,16 +593,17 @@ class AllBookletsExport extends ConfigurableService
 
             foreach($results as $result){
                 /** @var DeliveryExecution $execution */
-                $execution = $execution = $this->getServiceLocator()->get(ServiceProxy::SERVICE_ID)->getDeliveryExecution($result['deliveryResultIdentifier']);
+                $execution = $this->getServiceLocator()->get(ServiceProxy::SERVICE_ID)->getDeliveryExecution($result['deliveryResultIdentifier']);
                 $row = array();
 
                 $startime = $this->cleanTimestamp($execution->getStartTime());
-                if (!is_null($this->dayToExport)  && $this->getEpochDay($startime) != $this->dayToExport) {
+                if (null !== $this->dayToExport && $this->getEpochDay($startime) !== $this->dayToExport) {
                     continue;
                 }
 
-                $user = $this->getResource($execution->getUserIdentifier());
-                $row['ID'] = $user->getLabel();
+                $user = $userService->getUserById($execution->getUserIdentifier());
+
+                $row['ID'] = $this->getUserId($user);
                 $row['IDFORM'] = $delivery->getLabel();
                 $row['STARTTIME'] = $startime;
                 $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
@@ -722,6 +730,13 @@ class AllBookletsExport extends ConfigurableService
         $report->setData($i);
 
         return $report;
+    }
+
+    private function getUserId(User $user)
+    {
+        $label = $user->getPropertyValues(OntologyRdfs::RDFS_LABEL);
+
+        return array_shift($label) ?: '';
     }
 
     /**
