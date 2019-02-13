@@ -22,12 +22,15 @@ namespace oat\taoResultExports\model\export;
 
 use oat\dtms\DateTime;
 use oat\generis\model\OntologyAwareTrait;
+use oat\generis\model\OntologyRdfs;
 use oat\oatbox\filesystem\File;
 use oat\oatbox\filesystem\FileSystemService;
 use oat\oatbox\service\ConfigurableService;
+use oat\oatbox\user\User;
 use oat\taoDelivery\model\execution\DeliveryExecution;
 use oat\taoDelivery\model\execution\ServiceProxy;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
+use oat\taoLti\models\classes\user\UserService;
 use oat\taoResultServer\models\classes\ResultManagement;
 use oat\taoResultServer\models\classes\ResultServerService;
 use qtism\data\AssessmentTest;
@@ -150,6 +153,13 @@ class AllBookletsExport extends ConfigurableService
     private $exoticCharacters = [];
 
     /**
+     * If set to false - there would be no timestamp in filename
+     *
+     * @var bool
+     */
+    private $allowTimestampInFilename = true;
+
+    /**
      * @param string $identifierStrategy
      */
     public function setIdentifierStrategy($identifierStrategy)
@@ -170,7 +180,11 @@ class AllBookletsExport extends ConfigurableService
      */
     public function setPrefix($prefix)
     {
-        $this->prefix = rtrim($prefix,'_').'_';;
+        if ($this->allowTimestampInFilename) {
+            $this->prefix = rtrim($prefix,'_').'_';
+        } else {
+            $this->prefix = rtrim($prefix,'_');
+        }
     }
 
 
@@ -279,12 +293,22 @@ class AllBookletsExport extends ConfigurableService
         if (!is_null($this->dayToExport)) {
             $directory .= $this->dayToExport . DIRECTORY_SEPARATOR;
         }
-        $filename = $this->prefix. date('His') .'.csv';
 
-        return $this->getServiceLocator()
+        $postfix = $this->allowTimestampInFilename ? date('His') : '';
+
+        $filename = $this->prefix. $postfix .'.csv';
+
+        /** @var File $file */
+        $file = $this->getServiceLocator()
             ->get(FileSystemService::SERVICE_ID)
             ->getDirectory(self::FILESYSTEM_ID)
             ->getFile($directory . $filename);
+
+        if ($this->allowTimestampInFilename === false && $file->exists()) {
+            $file->delete();
+        }
+
+        return $file;
     }
 
     /**
@@ -553,14 +577,18 @@ class AllBookletsExport extends ConfigurableService
      */
     private function getRows()
     {
-
         $report = \common_report_Report::createSuccess();
+
+        /** @var UserService $userService */
+        $userService = $this->getServiceManager()->get(UserService::SERVICE_ID);
 
         $exportedResultsCount = 0;
         $i = 0;
         /** @var \core_kernel_classes_Resource $delivery */
         foreach($this->deliveries as $delivery){
             $deliveryUri = $delivery->getUri();
+
+            /** @var ResultManagement $storage */
             $storage = $this->getServiceLocator()->get(ResultServerService::SERVICE_ID)->getResultStorage($delivery);
 
             if(!$storage instanceof ResultManagement) {
@@ -572,16 +600,17 @@ class AllBookletsExport extends ConfigurableService
 
             foreach($results as $result){
                 /** @var DeliveryExecution $execution */
-                $execution = $execution = $this->getServiceLocator()->get(ServiceProxy::SERVICE_ID)->getDeliveryExecution($result['deliveryResultIdentifier']);
+                $execution = $this->getServiceLocator()->get(ServiceProxy::SERVICE_ID)->getDeliveryExecution($result['deliveryResultIdentifier']);
                 $row = array();
 
                 $startime = $this->cleanTimestamp($execution->getStartTime());
-                if (!is_null($this->dayToExport)  && $this->getEpochDay($startime) != $this->dayToExport) {
+                if (null !== $this->dayToExport && $this->getEpochDay($startime) !== $this->dayToExport) {
                     continue;
                 }
 
-                $user = $this->getResource($execution->getUserIdentifier());
-                $row['ID'] = $user->getLabel();
+                $user = $userService->getUserById($execution->getUserIdentifier());
+
+                $row['ID'] = $this->getUserId($user);
                 $row['IDFORM'] = $delivery->getLabel();
                 $row['STARTTIME'] = $startime;
                 $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
@@ -708,6 +737,13 @@ class AllBookletsExport extends ConfigurableService
         $report->setData($i);
 
         return $report;
+    }
+
+    private function getUserId(User $user)
+    {
+        $label = $user->getPropertyValues(OntologyRdfs::RDFS_LABEL);
+
+        return array_shift($label) ?: '';
     }
 
     /**
@@ -993,5 +1029,10 @@ class AllBookletsExport extends ConfigurableService
             $this->exoticCharactersReplacementTable  = array_fill(0, count($this->getExoticVocabulary()), '');
         }
         return $this->exoticCharactersReplacementTable;
+    }
+
+    public function setAllowTimestampInFilename($allowTimestamp = true)
+    {
+        $this->allowTimestampInFilename = $allowTimestamp;
     }
 }
