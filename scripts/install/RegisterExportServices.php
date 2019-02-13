@@ -21,31 +21,24 @@
 namespace oat\taoResultExports\scripts\install;
 
 use oat\oatbox\extension\InstallAction;
-use oat\oatbox\filesystem\FileSystemService;
-use oat\taoResultExports\model\export\AllBookletsExport;
 use common_report_Report as Report;
+use oat\taoResultExports\model\export\LoginExport;
 
 /**
- * Register the export directory
- *
- * @author Antoine Robin <antoine@taotesting.com>
+ * Register the export services
  */
-class CreateExportDirectory extends InstallAction
+class RegisterExportServices extends InstallAction
 {
     /**
      * @param $params
      */
     public function __invoke($params)
     {
-        /** @var FileSystemService $fsService */
-        $fsService = $this->getServiceLocator()->get(FileSystemService::SERVICE_ID);
-        if (!$fsService->hasDirectory(AllBookletsExport::FILESYSTEM_ID)) {
-            $fsService->createFileSystem(AllBookletsExport::FILESYSTEM_ID, AllBookletsExport::FILESYSTEM_NAME);
-            $this->registerService(FileSystemService::SERVICE_ID, $fsService);
+        $this->getServiceManager()->register(
+            LoginExport::SERVICE_ID,
+            new LoginExport($params)
+        );
 
-            return Report::createSuccess('Filesystem : ' . AllBookletsExport::FILESYSTEM_ID . ' successfully created');
-        }
-
-        return Report::createInfo('Filesystem : ' . AllBookletsExport::FILESYSTEM_ID . ' already exists');
+        return Report::createSuccess('LoginExport successfully registered');
     }
 }
