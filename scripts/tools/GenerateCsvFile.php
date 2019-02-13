@@ -88,6 +88,15 @@ class GenerateCsvFile extends ScriptAction
                 'description' => 'Allows export of exotic characters'
             ],
 
+            'withoutTimestamp' => [
+                'longPrefix'    => 'without-timestamp',
+                'prefix'        => 'wt',
+                'flag'          => true,
+                'description'   => 'Setting this flag would mean that export file won\'t have timestamp postfix in filename',
+                'defaultValue'  => false,
+                'cast'          => 'boolean'
+            ]
+
         ];
     }
 
@@ -129,6 +138,7 @@ class GenerateCsvFile extends ScriptAction
         $bookletExporter = $this->getServiceLocator()->get(AllBookletsExport::SERVICE_ID);
         $bookletExporter->setDeliveries($deliveries);
         $bookletExporter->setIdentifierStrategy($identifierStrategy);
+        $bookletExporter->setAllowTimestampInFilename($this->isTimestampNeeded());
         $bookletExporter->setPrefix($prefix);
         $bookletExporter->setVariablePolicy($variablePolicy);
         
@@ -195,5 +205,12 @@ class GenerateCsvFile extends ScriptAction
     protected function showTime()
     {
         return true;
+    }
+
+    private function isTimestampNeeded()
+    {
+        $withoutTimestamp = $this->getOption('withoutTimestamp', false);
+
+        return !(bool)$withoutTimestamp;
     }
 }
