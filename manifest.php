@@ -20,7 +20,7 @@
 use oat\taoResultExports\scripts\install\CreateExportDirectory;
 
 return [
-    'name' => 'taoResultsExports',
+    'name' => 'taoResultExports',
     'label' => 'Export Tools',
     'description' => 'Extension providing tools dedicated to operations.',
     'license' => 'GPL-2.0',
