@@ -34,7 +34,7 @@ use oat\taoResultExports\model\export\renderer\RendererInterface;
 use oat\taoResultServer\models\classes\ResultManagement;
 use oat\taoResultServer\models\classes\ResultServerService;
 
-class LoginExport extends ConfigurableService
+class ExportLoginService extends ConfigurableService
 {
     use OntologyAwareTrait;
 

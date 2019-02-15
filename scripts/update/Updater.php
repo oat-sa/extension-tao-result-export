@@ -21,7 +21,7 @@
 namespace oat\taoResultExports\scripts\update;
 
 use oat\taoResultExports\model\export\AllBookletsExport;
-use oat\taoResultExports\model\export\LoginExport;
+use oat\taoResultExports\model\export\ExportLoginService;
 
 /**
  * TAO Operations Extension Updater.
@@ -225,8 +225,8 @@ class Updater extends \common_ext_ExtensionUpdater
 
         if ($this->isVersion('0.4.0')) {
             $this->getServiceManager()->register(
-                LoginExport::SERVICE_ID,
-                new LoginExport([])
+                ExportLoginService::SERVICE_ID,
+                new ExportLoginService([])
             );
 
             $this->setVersion('0.5.0');

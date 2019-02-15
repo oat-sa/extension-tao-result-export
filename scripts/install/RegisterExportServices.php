@@ -22,7 +22,7 @@ namespace oat\taoResultExports\scripts\install;
 
 use oat\oatbox\extension\InstallAction;
 use common_report_Report as Report;
-use oat\taoResultExports\model\export\LoginExport;
+use oat\taoResultExports\model\export\ExportLoginService;
 
 /**
  * Register the export services
@@ -35,8 +35,8 @@ class RegisterExportServices extends InstallAction
     public function __invoke($params)
     {
         $this->getServiceManager()->register(
-            LoginExport::SERVICE_ID,
-            new LoginExport($params)
+            ExportLoginService::SERVICE_ID,
+            new ExportLoginService($params)
         );
 
         return Report::createSuccess('LoginExport successfully registered');

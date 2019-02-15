@@ -25,7 +25,7 @@ use core_kernel_classes_Resource;
 use oat\generis\model\OntologyAwareTrait;
 use oat\oatbox\extension\script\ScriptAction;
 use oat\oatbox\filesystem\FileSystemService;
-use oat\taoResultExports\model\export\LoginExport;
+use oat\taoResultExports\model\export\ExportLoginService;
 use oat\taoResultExports\model\export\renderer\CsvRenderer;
 use oat\taoResultExports\model\export\renderer\RendererInterface;
 use oat\taoResultExports\model\export\renderer\StdOutRenderer;
@@ -34,9 +34,9 @@ use oat\taoResultExports\model\export\renderer\StdOutRenderer;
  * Class GenerateLoginCsvFile
  * @package oat\taoResultExports\scripts\tools
  *
- * usage : sudo -u www-data php index.php 'oat\taoResultExports\scripts\tools\GenerateLoginCsvFile' -p myDelivery
+ * usage : sudo -u www-data php index.php 'oat\taoResultExports\scripts\tools\ExportLoginCommand' -p myDelivery
  */
-class GenerateLoginCsvFile extends ScriptAction
+class ExportLoginCommand extends ScriptAction
 {
     use OntologyAwareTrait;
 
@@ -98,8 +98,8 @@ class GenerateLoginCsvFile extends ScriptAction
     {
         $deliveryResources = $this->getDeliveryResources();
 
-        /** @var LoginExport $loginExporter */
-        $loginExporter = $this->getServiceLocator()->get(LoginExport::SERVICE_ID);
+        /** @var ExportLoginService $loginExporter */
+        $loginExporter = $this->getServiceLocator()->get(ExportLoginService::SERVICE_ID);
         $loginExporter->setDeliveries($deliveryResources)
             ->setRenderer($this->getRenderer())
             ->setWithHeaders($this->areHeadersNeeded());
@@ -133,6 +133,8 @@ class GenerateLoginCsvFile extends ScriptAction
 
     /**
      * @return RendererInterface
+     *
+     * @throws \oat\oatbox\service\exception\InvalidServiceManagerException
      */
     private function getRenderer()
     {
@@ -148,15 +150,13 @@ class GenerateLoginCsvFile extends ScriptAction
      * @param $rendererName
      *
      * @return RendererInterface
-     *
-     * @throws \oat\oatbox\service\exception\InvalidServiceManagerException
      */
     private function buildRenderer($rendererName)
     {
         switch ($rendererName) {
             case CsvRenderer::SHORT_NAME:
                 return new CsvRenderer(
-                    $this->getServiceLocator()->get(FileSystemService::SERVICE_ID),
+                    $this->getFileSystemService(),
                     $this->getPrefix(),
                     $this->isTimestampNeeded()
                 );
@@ -166,6 +166,14 @@ class GenerateLoginCsvFile extends ScriptAction
             default:
                 return new StdOutRenderer();
         }
+    }
+
+    /**
+     * @return FileSystemService
+     */
+    protected function getFileSystemService()
+    {
+        return $this->getServiceLocator()->get(FileSystemService::SERVICE_ID);
     }
 
     protected function formatTime($s)
@@ -182,24 +190,24 @@ class GenerateLoginCsvFile extends ScriptAction
         return true;
     }
 
-    private function getPrefix()
+    protected function getPrefix()
     {
         return $this->hasOption('prefix')
             ? $this->getOption('prefix')
             : 'login';
     }
 
-    private function isTimestampNeeded()
+    protected function isTimestampNeeded()
     {
-        $withoutTimestamp = $this->getOption('withoutTimestamp', false);
+        $withoutTimestamp = $this->getOption('withoutTimestamp');
 
-        return !(bool)$withoutTimestamp;
+        return $withoutTimestamp !== true;
     }
 
     private function areHeadersNeeded()
     {
-        $withHeaders = $this->getOption('withHeaders', false);
+        $withHeaders = $this->getOption('withHeaders');
 
-        return (bool)$withHeaders === true;
+        return $withHeaders === true;
     }
 }
