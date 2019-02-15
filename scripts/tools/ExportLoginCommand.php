@@ -34,7 +34,7 @@ use oat\taoResultExports\model\export\renderer\StdOutRenderer;
  * Class GenerateLoginCsvFile
  * @package oat\taoResultExports\scripts\tools
  *
- * usage : sudo -u www-data php index.php 'oat\taoResultExports\scripts\tools\ExportLoginCommand' -p myDelivery
+ * usage : sudo -u www-data php index.php 'oat\taoResultExports\scripts\tools\ExportLoginCommand' -d myDelivery
  */
 class ExportLoginCommand extends ScriptAction
 {
