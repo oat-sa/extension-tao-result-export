@@ -24,14 +24,13 @@ use core_kernel_classes_Resource;
 use oat\generis\model\GenerisRdf;
 use oat\generis\model\OntologyAwareTrait;
 use oat\generis\model\OntologyRdfs;
-use oat\oatbox\filesystem\File;
-use oat\oatbox\filesystem\FileSystemService;
 use oat\oatbox\service\ConfigurableService;
 use oat\oatbox\user\User;
 use oat\taoDelivery\model\execution\DeliveryExecution;
 use oat\taoDelivery\model\execution\ServiceProxy;
 use oat\taoLti\models\classes\user\LtiUserService;
 use oat\taoLti\models\classes\user\UserService;
+use oat\taoResultExports\model\export\renderer\RendererInterface;
 use oat\taoResultServer\models\classes\ResultManagement;
 use oat\taoResultServer\models\classes\ResultServerService;
 
@@ -44,61 +43,41 @@ class LoginExport extends ConfigurableService
     /** @var core_kernel_classes_Resource[] */
     private $deliveries;
 
-    /** @var string  */
-    private $prefix;
-
-    /**
-     * The resource to handle the temporary file
-     *
-     * @var resource
-     */
-    protected $exportFile;
-
-    /**
-     * Filesystem File to manage exported file storage
-     *
-     * @var File
-     */
-    protected $flySystemFile;
-
-    /**
-     * @var bool   On FALSE there will not be timestamp in the filename
-     */
-    private $allowTimestampInFilename = true;
-
     /** @var bool */
     private $withHeaders = false;
+
+    /** @var RendererInterface */
+    private $renderer;
+
+    /**
+     * @param RendererInterface $renderer
+     *
+     * @return $this
+     */
+    public function setRenderer(RendererInterface $renderer)
+    {
+        $this->renderer = $renderer;
+
+        return $this;
+    }
 
     /**
      * @param core_kernel_classes_Resource[] $deliveries
      *
      * @return self
      */
-    public function setDeliveries($deliveries)
+    public function setDeliveries(array $deliveries)
     {
         $this->deliveries = $deliveries;
 
         return $this;
     }
 
-    public function setPrefix($prefix)
-    {
-        if ($this->allowTimestampInFilename) {
-            $this->prefix = rtrim($prefix,'_').'_';
-        } else {
-            $this->prefix = rtrim($prefix,'_');
-        }
-
-        return $this;
-    }
-
-    public function setAllowTimestampInFilename($allowTimestamp = true)
-    {
-        $this->allowTimestampInFilename = $allowTimestamp;
-
-        return $this;
-    }
-
+    /**
+     * @param bool $withHeaders
+     *
+     * @return $this
+     */
     public function setWithHeaders($withHeaders = false)
     {
         $this->withHeaders = $withHeaders;
@@ -114,21 +93,16 @@ class LoginExport extends ConfigurableService
      * @throws \common_Exception
      * @throws \common_exception_Error
      * @throws \common_exception_NotFound
-     * @throws \qtism\data\storage\php\PhpStorageException
      */
     public function export()
     {
         $report = \common_report_Report::createSuccess();
 
-        // Initialize temporary file.
-        $tmpLocation = tempnam(sys_get_temp_dir(), 'invalsiexport');
-        $this->exportFile = fopen($tmpLocation, 'w+');
-
         if ($this->withHeaders === true) {
-            $this->writeToCsv($this->getHeaders());
+            $this->renderer->addRow($this->getHeaders());
         }
 
-        $rowsReport = $this->getRows();
+        $rowsReport = $this->addRows();
         $report->add($rowsReport);
 
         if ($report->containsError()) {
@@ -139,44 +113,10 @@ class LoginExport extends ConfigurableService
         $rows = $rowsReport->getData();
 
         // Write as stream and close temporary file.
-        $exportFile = $this->createExportFile();
-        $report->setMessage($rows . ' row(s) exported to ' . $exportFile->getPrefix() . '.');
-        rewind($this->exportFile);
-        $exportFile->write($this->exportFile);
-
-        fclose($this->exportFile);
-        unlink($tmpLocation);
+        $path = $this->renderer->render();
+        $report->setMessage($rows . ' row(s) exported to ' . $path . '.');
 
         return $report;
-    }
-
-
-    /**
-     * Create the filename for the export
-     *
-     * If there is a daily mode then add the date as subfolder
-     *
-     * @return mixed
-     */
-    protected function createExportFile()
-    {
-        $directory = date('Y_m_d') . DIRECTORY_SEPARATOR . gethostname() . DIRECTORY_SEPARATOR;
-
-        $postfix = $this->allowTimestampInFilename ? date('His') : '';
-
-        $filename = $this->prefix. $postfix .'.csv';
-
-        /** @var File $file */
-        $file = $this->getServiceLocator()
-            ->get(FileSystemService::SERVICE_ID)
-            ->getDirectory(AllBookletsExport::FILESYSTEM_ID)
-            ->getFile($directory . $filename);
-
-        if ($this->allowTimestampInFilename === false && $file->exists()) {
-            $file->delete();
-        }
-
-        return $file;
     }
 
     /**
@@ -186,10 +126,9 @@ class LoginExport extends ConfigurableService
      *
      * @throws \common_exception_Error
      * @throws \common_exception_NotFound
-     * @throws \qtism\data\storage\php\PhpStorageException
      * @throws \oat\oatbox\service\exception\InvalidServiceManagerException
      */
-    private function getRows()
+    private function addRows()
     {
         $report = \common_report_Report::createSuccess();
 
@@ -222,7 +161,7 @@ class LoginExport extends ConfigurableService
                     return $report;
                 }
 
-                $this->writeToCsv([$userLogin]);
+                $this->renderer->addRow([$userLogin]);
                 $i++;
             }
         }
@@ -232,6 +171,13 @@ class LoginExport extends ConfigurableService
         return $report;
     }
 
+    /**
+     * Returns the requested user's login.
+     *
+     * @param User $user
+     *
+     * @return string
+     */
     private function getUserLogin(User $user)
     {
         // TAO login
@@ -252,25 +198,15 @@ class LoginExport extends ConfigurableService
         return array_shift($label) ?: '';
     }
 
+    /**
+     * Returns the headers.
+     *
+     * @return array
+     */
     private function getHeaders()
     {
         return [
             'login',
         ];
-    }
-
-    /**
-     * Write the row provided in the csv file
-     *
-     * @param array $row
-     *
-     * @throws \qtism\data\storage\php\PhpStorageException
-     */
-    private function writeToCsv(array $row)
-    {
-        // Write the row using PHP's default CSV configuration.
-        if (fputcsv($this->exportFile, $row) === false) {
-            \common_Logger::w('Fail to write in the csv file : ' . implode(',', $row));
-        }
     }
 }

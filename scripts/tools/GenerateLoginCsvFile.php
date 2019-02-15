@@ -21,9 +21,14 @@
 namespace oat\taoResultExports\scripts\tools;
 
 
+use core_kernel_classes_Resource;
 use oat\generis\model\OntologyAwareTrait;
 use oat\oatbox\extension\script\ScriptAction;
+use oat\oatbox\filesystem\FileSystemService;
 use oat\taoResultExports\model\export\LoginExport;
+use oat\taoResultExports\model\export\renderer\CsvRenderer;
+use oat\taoResultExports\model\export\renderer\RendererInterface;
+use oat\taoResultExports\model\export\renderer\StdOutRenderer;
 
 /**
  * Class GenerateLoginCsvFile
@@ -34,6 +39,11 @@ use oat\taoResultExports\model\export\LoginExport;
 class GenerateLoginCsvFile extends ScriptAction
 {
     use OntologyAwareTrait;
+
+    private $availableRenderers = [
+        CsvRenderer::SHORT_NAME,
+        StdOutRenderer::SHORT_NAME,
+    ];
 
     protected function provideDescription()
     {
@@ -48,6 +58,13 @@ class GenerateLoginCsvFile extends ScriptAction
                 'longPrefix'  => 'delivery',
                 'required'    => true,
                 'description' => 'List of deliveries to export (separated by comma)',
+            ],
+            'renderer' => [
+                'prefix'       => 'r',
+                'longPrefix'   => 'renderer',
+                'description'  => 'Renderer of the report [' . implode(',', $this->availableRenderers) . ']',
+                'defaultValue' => CsvRenderer::SHORT_NAME,
+                'cast'         => 'string',
             ],
             'withHeaders' => [
                 'prefix'       => 'wh',
@@ -79,24 +96,13 @@ class GenerateLoginCsvFile extends ScriptAction
 
     public function run()
     {
-        $prefix = $this->hasOption('prefix')
-            ? $this->getOption('prefix')
-            : 'login';
-
-        $deliveries = $this->getOption('delivery');
-        $deliveryResources = [];
-        foreach (explode(',', $deliveries) as $delivery){
-            $deliveryResources[] = $this->getResource($delivery);
-        }
+        $deliveryResources = $this->getDeliveryResources();
 
         /** @var LoginExport $loginExporter */
         $loginExporter = $this->getServiceLocator()->get(LoginExport::SERVICE_ID);
         $loginExporter->setDeliveries($deliveryResources)
-            ->setAllowTimestampInFilename($this->isTimestampNeeded())
-            ->setWithHeaders($this->areHeadersNeeded())
-            ->setPrefix($prefix);
-
-        $exportReport = $loginExporter->export();
+            ->setRenderer($this->getRenderer())
+            ->setWithHeaders($this->areHeadersNeeded());
 
         $report = new \common_report_Report(
             \common_report_Report::TYPE_INFO,
@@ -105,9 +111,61 @@ class GenerateLoginCsvFile extends ScriptAction
             }, $deliveryResources))
         );
 
-        $report->add($exportReport);
+        // Do the export
+        $report->add($loginExporter->export());
 
         return $report;
+    }
+
+    /**
+     * @return core_kernel_classes_Resource[]
+     */
+    private function getDeliveryResources()
+    {
+        $deliveries = $this->getOption('delivery');
+        $deliveryResources = [];
+        foreach (explode(',', $deliveries) as $delivery){
+            $deliveryResources[] = $this->getResource($delivery);
+        }
+
+        return $deliveryResources;
+    }
+
+    /**
+     * @return RendererInterface
+     */
+    private function getRenderer()
+    {
+        $rendererName = $this->getOption('renderer');
+        if (!in_array($rendererName, $this->availableRenderers)) {
+            $rendererName = reset($this->availableRenderers);
+        }
+
+        return $this->buildRenderer($rendererName);
+    }
+
+    /**
+     * @param $rendererName
+     *
+     * @return RendererInterface
+     *
+     * @throws \oat\oatbox\service\exception\InvalidServiceManagerException
+     */
+    private function buildRenderer($rendererName)
+    {
+        switch ($rendererName) {
+            case CsvRenderer::SHORT_NAME:
+                return new CsvRenderer(
+                    $this->getServiceLocator()->get(FileSystemService::SERVICE_ID),
+                    $this->getPrefix(),
+                    $this->isTimestampNeeded()
+                );
+                break;
+
+            case StdOutRenderer::SHORT_NAME:
+            default:
+                return new StdOutRenderer();
+        }
     }
 
     protected function formatTime($s)
@@ -122,6 +180,13 @@ class GenerateLoginCsvFile extends ScriptAction
     protected function showTime()
     {
         return true;
+    }
+
+    private function getPrefix()
+    {
+        return $this->hasOption('prefix')
+            ? $this->getOption('prefix')
+            : 'login';
     }
 
     private function isTimestampNeeded()
