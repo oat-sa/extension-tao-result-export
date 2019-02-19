@@ -59,6 +59,11 @@ class ExportLoginCommand extends ScriptAction
                 'required'    => true,
                 'description' => 'List of deliveries to export (separated by comma)',
             ],
+            'prefix' => [
+                'prefix'      => 'p',
+                'longPrefix'  => 'prefix',
+                'description' => 'Prefix of the file to export'
+            ],
             'renderer' => [
                 'prefix'       => 'r',
                 'longPrefix'   => 'renderer',
