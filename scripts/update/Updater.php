@@ -21,10 +21,11 @@
 namespace oat\taoResultExports\scripts\update;
 
 use oat\taoResultExports\model\export\AllBookletsExport;
+use oat\taoResultExports\model\export\ExportLoginService;
 
 /**
  * TAO Operations Extension Updater.
- * 
+ *
  * This class provides an implementation of the Generis
  * Extension Updater aiming at updating the TAO Operations Extension.
  */
@@ -32,10 +33,10 @@ class Updater extends \common_ext_ExtensionUpdater
 {
     /**
      * Update the Extension
-     * 
+     *
      * Calling this method will update the TAO Operations Extension from
      * an $initialVersion to a target version.
-     * 
+     *
      * @param string $initialVersion
      * @see \common_ext_ExtensionUpdater
      * @return void
@@ -221,5 +222,15 @@ class Updater extends \common_ext_ExtensionUpdater
         }
 
         $this->skip('0.2.0', '0.4.1');
+
+        if ($this->isVersion('0.4.1')) {
+            $this->getServiceManager()->register(
+                ExportLoginService::SERVICE_ID,
+                new ExportLoginService([])
+            );
+
+            $this->setVersion('0.5.0');
+        }
+
     }
 }
