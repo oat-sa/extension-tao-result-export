@@ -18,13 +18,14 @@
  *
  */
 use oat\taoResultExports\scripts\install\CreateExportDirectory;
+use oat\taoResultExports\scripts\install\RegisterExportServices;
 
 return [
     'name' => 'taoResultExports',
     'label' => 'Export Tools',
     'description' => 'Extension providing tools dedicated to operations.',
     'license' => 'GPL-2.0',
-    'version' => '0.4.1',
+    'version' => '0.5.0',
     'author' => 'Open Assessment Technologies',
     'requires' => [
         'generis' => '>=6.5.1',
@@ -40,7 +41,8 @@ return [
     'update' => 'oat\\taoResultExports\\scripts\\update\\Updater',
     'install' => [
         'php'	=> [
-            CreateExportDirectory::class
+            CreateExportDirectory::class,
+            RegisterExportServices::class,
         ]
     ],
 ];
