@@ -81,7 +81,12 @@ class GenerateCsvFile extends ScriptAction
                 'flag' => true,
                 'description' => 'Split result exports by day'
             ],
-
+            'incremental' => [
+                'prefix' => 'i',
+                'longPrefix' => 'incremental',
+                'flag' => true,
+                'description' => 'If exports should be incremental'
+            ],
             'exotic' => [
                 'longPrefix' => 'exotic',
                 'flag' => true,
@@ -159,7 +164,12 @@ class GenerateCsvFile extends ScriptAction
 
         // Param 6: split export by day
         if (!$this->hasOption('daily')) {
-            $exportReport = $bookletExporter->export();
+            //For FT-related exports -> from now on they should be incremental, from start of the campaign until "yesterday" on each day
+            if ($this->hasOption('incremental')) {
+                $exportReport = $bookletExporter->incrementalDailyExport((new \DateTime())->format('Y-m-d'));
+            } else {
+                $exportReport = $bookletExporter->export();
+            }
         } else {
             $exportReport = $bookletExporter->dailyExport();
         }
