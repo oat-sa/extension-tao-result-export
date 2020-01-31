@@ -160,6 +160,13 @@ class AllBookletsExport extends ConfigurableService
     private $allowTimestampInFilename = true;
 
     /**
+     * If the export is incremental, we don't need to include current day
+     *
+     * @var null | string
+     */
+    private $excludedDate = null;
+
+    /**
      * @param string $identifierStrategy
      */
     public function setIdentifierStrategy($identifierStrategy)
@@ -278,6 +285,13 @@ class AllBookletsExport extends ConfigurableService
         }
 
         return $report;
+    }
+
+    public function incrementalDailyExport($excludedDate)
+    {
+        $this->excludedDate = $excludedDate;
+
+        return $this->export();
     }
 
     /**
@@ -605,6 +619,9 @@ class AllBookletsExport extends ConfigurableService
 
                 $startime = $this->cleanTimestamp($execution->getStartTime());
                 if (null !== $this->dayToExport && $this->getEpochDay($startime) !== $this->dayToExport) {
+                    continue;
+                }
+                if (!is_null($this->excludedDate) && $this->getEpochDay($startime) == $this->excludedDate) {
                     continue;
                 }
 
