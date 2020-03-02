@@ -121,7 +121,7 @@ class AllBookletsExport extends ConfigurableService
     private $headers = null;
 
     /** @var string  */
-    private $prefix;
+    protected $prefix;
 
     /**
      * The resource to handle the temporary file
@@ -157,7 +157,7 @@ class AllBookletsExport extends ConfigurableService
      *
      * @var bool
      */
-    private $allowTimestampInFilename = true;
+    protected $allowTimestampInFilename = true;
 
     /**
      * @param string $identifierStrategy
@@ -317,7 +317,7 @@ class AllBookletsExport extends ConfigurableService
      * @return array $headers
      * @throws \qtism\data\storage\php\PhpStorageException
      */
-    private function getHeaders()
+    protected function getHeaders()
     {
         if (is_null($this->headers)) {
             $headers = array('ID', 'IDFORM', 'STARTTIME', 'FINISHTIME');
@@ -575,7 +575,7 @@ class AllBookletsExport extends ConfigurableService
      * @throws \common_exception_NotFound
      * @throws \qtism\data\storage\php\PhpStorageException
      */
-    private function getRows()
+    protected function getRows()
     {
         $report = \common_report_Report::createSuccess();
 
@@ -754,7 +754,7 @@ class AllBookletsExport extends ConfigurableService
      *
      * @throws \qtism\data\storage\php\PhpStorageException
      */
-    private function writeToCsv(array $row, $isHeader = false)
+    protected function writeToCsv(array $row, $isHeader = false)
     {
         // order the row to match the headers
 
