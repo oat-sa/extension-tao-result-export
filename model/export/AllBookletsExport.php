@@ -591,7 +591,7 @@ class AllBookletsExport extends ConfigurableService
             /** @var ResultManagement $storage */
             $storage = $this->getServiceLocator()->get(ResultServerService::SERVICE_ID)->getResultStorage($delivery);
 
-            if(!$storage instanceof ResultManagement) {
+            if (!$storage instanceof ResultManagement) {
                 continue;
             }
 
@@ -604,7 +604,7 @@ class AllBookletsExport extends ConfigurableService
                 $row = array();
 
                 $startime = $this->cleanTimestamp($execution->getStartTime());
-                if (null !== $this->dayToExport && $this->getEpochDay($startime) !== $this->dayToExport) {
+                if (!$this->withinDateRange($startime)) {
                     continue;
                 }
 
@@ -737,6 +737,15 @@ class AllBookletsExport extends ConfigurableService
         $report->setData($i);
 
         return $report;
+    }
+
+    /**
+     * @param $startime
+     * @return bool
+     */
+    protected function withinDateRange($startime)
+    {
+        return null === $this->dayToExport || $this->getEpochDay($startime) === $this->dayToExport;
     }
 
     private function getUserId(User $user)
