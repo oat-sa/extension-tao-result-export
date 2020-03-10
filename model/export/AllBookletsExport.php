@@ -960,7 +960,7 @@ class AllBookletsExport extends ConfigurableService
      * @param $epoch
      * @return string Formatted as Y-m-d
      */
-    private function getEpochDay($epoch)
+    protected function getEpochDay($epoch)
     {
         $dt = new DateTime("@$epoch");
         return $dt->format('Y-m-d');
