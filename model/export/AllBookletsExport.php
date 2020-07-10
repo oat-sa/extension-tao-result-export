@@ -260,7 +260,7 @@ class AllBookletsExport extends ConfigurableService
             ? $this->getOption(self::OPTION_NUMBER_OF_DAILY_EXPORT)
             : 3;
 
-        $currentDate = new \DateTime("tomorrow");
+        $currentDate = new \DateTime();
         $interval = new \DateInterval('P1D');
         $report = \common_report_Report::createInfo('Exporting results for the last ' . $numberOfDayToExport . 'day(s):');
 
