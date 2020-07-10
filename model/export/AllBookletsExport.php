@@ -260,7 +260,7 @@ class AllBookletsExport extends ConfigurableService
             ? $this->getOption(self::OPTION_NUMBER_OF_DAILY_EXPORT)
             : 3;
 
-        $currentDate = new \DateTime();
+        $currentDate = new \DateTime("tomorrow");
         $interval = new \DateInterval('P1D');
         $report = \common_report_Report::createInfo('Exporting results for the last ' . $numberOfDayToExport . 'day(s):');
 
@@ -559,6 +559,8 @@ class AllBookletsExport extends ConfigurableService
                 $report->setMessage('Impossible to get headers for theses deliveries');
                 return $report;
             }
+            
+            $headers = array_merge($headers, ['SCORE', 'ATTEMPT_ID']);
 
             $this->headers = array_unique($headers);
         }
@@ -614,6 +616,8 @@ class AllBookletsExport extends ConfigurableService
                 $row['IDFORM'] = $delivery->getLabel();
                 $row['STARTTIME'] = $startime;
                 $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
+    
+                $attemptScore = 0;
 
                 $callIds = $storage->getRelatedItemCallIds($execution->getIdentifier());
                 foreach ($callIds as $callId) {
@@ -628,6 +632,10 @@ class AllBookletsExport extends ConfigurableService
                         /** @var \taoResultServer_models_classes_Variable $variable */
                         $variable = $itemResult->variable;
                         $headerIdentifier = $itemIdentifier . '-' . $variable->getIdentifier();
+                        
+                        if ($variable->getIdentifier() === 'SCORE') {
+                            $attemptScore += (int)$variable->getValue();
+                        }
 
                         // Deal with variable policy...
                         if (($variable instanceof \taoResultServer_models_classes_ResponseVariable && $this->variablePolicy === self::VARIABLE_POLICY_OUTCOME) ||
@@ -717,6 +725,9 @@ class AllBookletsExport extends ConfigurableService
                         }
                     }
                 }
+                
+                $row['SCORE'] = $attemptScore;
+                $row['ATTEMPT_ID'] = $execution->getIdentifier();
 
                 if (empty($row)) {
                     $report->setType(\common_report_Report::TYPE_ERROR);
@@ -806,7 +817,7 @@ class AllBookletsExport extends ConfigurableService
      */
     protected function rowPostProcessing(array &$row, $deliveryUri)
     {
-        // Do nothing, it's just an opportunity to delegate some 
+        // Do nothing, it's just an opportunity to delegate some
         // post-processing on more specific implementations.
     }
 
