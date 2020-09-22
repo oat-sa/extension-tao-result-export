@@ -608,8 +608,8 @@ class AllBookletsExport extends ConfigurableService
                 $execution = $this->getServiceLocator()->get(ServiceProxy::SERVICE_ID)->getDeliveryExecution($result['deliveryResultIdentifier']);
                 $row = [];
 
-                $starTime = $this->cleanTimestamp($execution->getStartTime());
-                if (!$this->withinDateRange($starTime)) {
+                $startTime = $this->cleanTimestamp($execution->getStartTime());
+                if (!$this->withinDateRange($startTime)) {
                     continue;
                 }
 
@@ -617,7 +617,7 @@ class AllBookletsExport extends ConfigurableService
 
                 $row['ID'] = $this->getUserId($user);
                 $row['IDFORM'] = $delivery->getLabel();
-                $row['STARTTIME'] = $starTime;
+                $row['STARTTIME'] = $startTime;
                 $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
 
                 $itemCallIds = $storage->getRelatedItemCallIds($execution->getIdentifier());
@@ -722,7 +722,7 @@ class AllBookletsExport extends ConfigurableService
                     }
                 }
 
-                $row['SCORE'] = $this->getTotalScore($storage, $execution);
+                $row['SCORE'] = $this->fetchTotalScore($storage, $execution);
                 $row['ATTEMPT_ID'] = $execution->getIdentifier();
 
                 if (empty($row)) {
@@ -746,7 +746,7 @@ class AllBookletsExport extends ConfigurableService
         return $report;
     }
 
-    private function getTotalScore(ReadableResultStorage $storage, DeliveryExecution $deliveryExecution): int
+    private function fetchTotalScore(ReadableResultStorage $storage, DeliveryExecution $deliveryExecution): int
     {
         $testCallIds = $storage->getRelatedTestCallIds($deliveryExecution->getIdentifier());
 
