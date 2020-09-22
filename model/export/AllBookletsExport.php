@@ -31,6 +31,7 @@ use oat\taoDelivery\model\execution\DeliveryExecution;
 use oat\taoDelivery\model\execution\ServiceProxy;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
 use oat\taoLti\models\classes\user\UserService;
+use oat\taoOutcomeRds\model\RdsResultStorage;
 use oat\taoResultServer\models\classes\ResultManagement;
 use oat\taoResultServer\models\classes\ResultServerService;
 use qtism\data\AssessmentTest;
@@ -38,6 +39,8 @@ use qtism\data\ExtendedAssessmentItemRef;
 use qtism\data\state\OutcomeDeclaration;
 use qtism\data\state\ResponseDeclaration;
 use qtism\data\storage\php\PhpDocument;
+use RuntimeException;
+use taoResultServer_models_classes_ReadableResultStorage as ReadableResultStorage;
 
 class AllBookletsExport extends ConfigurableService
 {
@@ -81,11 +84,11 @@ class AllBookletsExport extends ConfigurableService
     ];
 
     private $variablesByDeliveries = [];
-    
+
     private $matchTypeByDeliveries = [];
-    
+
     private $matchSetsByDeliveries = [];
-    
+
     private $hottextTypeByDeliveries = [];
 
     private $choiceTypeByDeliveries = [];
@@ -559,7 +562,7 @@ class AllBookletsExport extends ConfigurableService
                 $report->setMessage('Impossible to get headers for theses deliveries');
                 return $report;
             }
-            
+
             $headers = array_merge($headers, ['SCORE', 'ATTEMPT_ID']);
 
             $this->headers = array_unique($headers);
@@ -590,7 +593,7 @@ class AllBookletsExport extends ConfigurableService
         foreach($this->deliveries as $delivery){
             $deliveryUri = $delivery->getUri();
 
-            /** @var ResultManagement $storage */
+            /** @var RdsResultStorage $storage */
             $storage = $this->getServiceLocator()->get(ResultServerService::SERVICE_ID)->getResultStorage($delivery);
 
             if (!$storage instanceof ResultManagement) {
@@ -603,10 +606,10 @@ class AllBookletsExport extends ConfigurableService
             foreach($results as $result){
                 /** @var DeliveryExecution $execution */
                 $execution = $this->getServiceLocator()->get(ServiceProxy::SERVICE_ID)->getDeliveryExecution($result['deliveryResultIdentifier']);
-                $row = array();
+                $row = [];
 
-                $startime = $this->cleanTimestamp($execution->getStartTime());
-                if (!$this->withinDateRange($startime)) {
+                $starTime = $this->cleanTimestamp($execution->getStartTime());
+                if (!$this->withinDateRange($starTime)) {
                     continue;
                 }
 
@@ -614,16 +617,13 @@ class AllBookletsExport extends ConfigurableService
 
                 $row['ID'] = $this->getUserId($user);
                 $row['IDFORM'] = $delivery->getLabel();
-                $row['STARTTIME'] = $startime;
+                $row['STARTTIME'] = $starTime;
                 $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
-    
-                $attemptScore = 0;
 
-                $callIds = $storage->getRelatedItemCallIds($execution->getIdentifier());
-                foreach ($callIds as $callId) {
-
-                    $itemResults = $storage->getVariables($callId);
-                    $splitCallId = explode('#', $callId);
+                $itemCallIds = $storage->getRelatedItemCallIds($execution->getIdentifier());
+                foreach ($itemCallIds as $itemCallId) {
+                    $itemResults = $storage->getVariables($itemCallId);
+                    $splitCallId = explode('#', $itemCallId);
                     $itemIdentifier = explode('.', $splitCallId[1]);
                     $itemIdentifier = $this->assessmentItemRefIdentifierMapping[$deliveryUri][$itemIdentifier[1]];
 
@@ -632,10 +632,6 @@ class AllBookletsExport extends ConfigurableService
                         /** @var \taoResultServer_models_classes_Variable $variable */
                         $variable = $itemResult->variable;
                         $headerIdentifier = $itemIdentifier . '-' . $variable->getIdentifier();
-                        
-                        if ($variable->getIdentifier() === 'SCORE') {
-                            $attemptScore += (int)$variable->getValue();
-                        }
 
                         // Deal with variable policy...
                         if (($variable instanceof \taoResultServer_models_classes_ResponseVariable && $this->variablePolicy === self::VARIABLE_POLICY_OUTCOME) ||
@@ -725,8 +721,8 @@ class AllBookletsExport extends ConfigurableService
                         }
                     }
                 }
-                
-                $row['SCORE'] = $attemptScore;
+
+                $row['SCORE'] = $this->getTotalScore($storage, $execution);
                 $row['ATTEMPT_ID'] = $execution->getIdentifier();
 
                 if (empty($row)) {
@@ -748,6 +744,35 @@ class AllBookletsExport extends ConfigurableService
         $report->setData($i);
 
         return $report;
+    }
+
+    private function getTotalScore(ReadableResultStorage $storage, DeliveryExecution $deliveryExecution): int
+    {
+        $testCallIds = $storage->getRelatedTestCallIds($deliveryExecution->getIdentifier());
+
+        if (!$testCallIds) {
+            throw new RuntimeException(
+                sprintf('TestCallIds not found for delivery execution %s', $deliveryExecution->getIdentifier())
+            );
+        }
+
+        if (count($testCallIds) > 1) {
+            throw new RuntimeException(
+                sprintf('Multiple TestCallIds for delivery execution %s', $deliveryExecution->getIdentifier())
+            );
+        }
+
+        $variables = $storage->getVariable($testCallIds[0], 'SCORE_TOTAL');
+
+        if (!$variables) {
+            throw new RuntimeException(
+                sprintf('Variable SCORE_TOTAL not found for delivery execution %s', $deliveryExecution->getIdentifier())
+            );
+        }
+
+        $totalScoreVariable = reset($variables);
+
+        return (int)$totalScoreVariable->variable->getValue();
     }
 
     /**
