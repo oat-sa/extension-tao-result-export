@@ -22,11 +22,17 @@ declare(strict_types=1);
 
 namespace oat\taoResultExports\scripts\tools;
 
+use common_Exception;
+use common_exception_Error;
+use common_exception_NotFound;
 use common_report_Report as Report;
+use LengthException;
 use oat\generis\model\OntologyAwareTrait;
 use oat\oatbox\extension\script\ScriptAction;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
 use oat\taoResultExports\model\export\AllBookletsExport;
+use qtism\data\storage\php\PhpStorageException;
+use RuntimeException;
 
 /**
  * Class GenerateCsvFile
@@ -54,8 +60,6 @@ class GenerateCsvFile extends ScriptAction
     protected const OPTION_STRATEGY_VALUES = ['itemRef', 'identifier', 'title', 'label'];
     protected const OPTION_POLICY_VALUES = ['all', 'response', 'outcome'];
     protected const OPTION_COVERAGE_VALUES = [self::OPTION_DAILY];
-
-    private $options;
 
     protected static function possibleValues(array $values): string
     {
@@ -123,9 +127,7 @@ class GenerateCsvFile extends ScriptAction
                 'prefix' => 'c',
                 'required' => false,
                 'description' => 'Period for which results are selected. '
-                    . static::possibleValues(static::OPTION_COVERAGE_VALUES),
-                'defaultValue' => '',
-                'cast' => 'string'
+                    . static::possibleValues(static::OPTION_COVERAGE_VALUES)
             ],
 
             static::OPTION_DAILY => [
@@ -164,11 +166,15 @@ class GenerateCsvFile extends ScriptAction
         ];
     }
 
+    /**
+     * @return Report
+     * @throws common_Exception
+     * @throws common_exception_Error
+     * @throws common_exception_NotFound
+     * @throws PhpStorageException
+     */
     public function run(): Report
     {
-        print_r($this->options);
-        die();
-
         $exporter = $this->getConfiguredBookletExporter();
 
         $deliveries = $this->fetchDeliveries();
@@ -180,36 +186,50 @@ class GenerateCsvFile extends ScriptAction
 
         $report = Report::createInfo('Exporting deliveries:' . PHP_EOL . $touchedDeliveriesMessage);
 
+        $coverage = $this->getCoverage();
 
-//        if ($this->hasOption())
-//        $coverage = $this->determineCoverage()
-        // -c = daily // --daily // as fallback
-        // -c = weekly // --weekly
-
-        if (!$this->hasOption(static::OPTION_COVERAGE)) {
+        // Fallback to default export without eny restrictions
+        if (empty($coverage)) {
             $report->add($exporter->export());
-        } else {
-            $method = $this->getOption(static::OPTION_COVERAGE) . 'Export';
-            if (method_exists($exporter, $method)) {
-                $reportone = $exporter->{$method};
-            }
-            //
+
+            return $report;
         }
 
+        $method = sprintf('%sExport', $coverage);
 
-
-        // Param 6: split export by day
-        if (!$this->hasOption('daily')) {
-            // fallback to simple export
-            $exportReport = $bookletExporter->export();
-        } else {
-            $exportReport = $bookletExporter->dailyExport();
+        if (!method_exists($exporter, $method)) {
+            throw new RuntimeException(
+                sprintf(
+                    'Implementation (method %s of class %s) for specific export not found',
+                    $method,
+                    get_class($exporter)
+                )
+            );
         }
 
-        
-        $report->add($exportReport);
+        $report->add($exporter->$method());
 
         return $report;
+    }
+
+    protected function getCoverage()
+    {
+        if ($this->hasOption(static::OPTION_COVERAGE)) {
+            return $this->getOption(static::OPTION_COVERAGE);
+        }
+
+        $coverageFlags = [];
+        foreach (static::OPTION_COVERAGE_VALUES as $value) {
+            if ($this->hasOption($value)) {
+                $coverageFlags[] = $value;
+            }
+        }
+
+        if (count($coverageFlags) > 1) {
+            throw new LengthException('Only one coverage period allowed at the same time');
+        }
+
+        return reset($coverageFlags);
     }
 
     protected function fetchDeliveries(): array
