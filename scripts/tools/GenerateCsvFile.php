@@ -33,6 +33,8 @@ use oat\taoResultExports\model\export\AllBookletsExport;
  * @package oat\taoResultExports\scripts\tools
  *
  * Usage: sudo -u www-data php index.php 'oat\taoResultExports\scripts\tools\GenerateCsvFile' -s title --policy all -p myDelivery
+
+ * todo: add field validation, especially with possible values
  */
 class GenerateCsvFile extends ScriptAction
 {
@@ -44,26 +46,20 @@ class GenerateCsvFile extends ScriptAction
     public const OPTION_BLACKLIST = 'blacklist';
     public const OPTION_RAW = 'raw';
     public const OPTION_PREFIX = 'prefix';
+    public const OPTION_COVERAGE = 'coverage';
     public const OPTION_DAILY = 'daily';
     public const OPTION_EXOTIC = 'exotic';
     public const OPTION_WITHOUT_TIMESTAMP = 'without-timestamp';
 
-    protected const OPTIONS_POSSIBLE_VALUES_MAP = [
-        self::OPTION_STRATEGY => ['itemRef', 'identifier', 'title', 'label'],
-        self::OPTION_POLICY => ['all', 'response', 'outcome'],
-    ];
+    protected const OPTION_STRATEGY_VALUES = ['itemRef', 'identifier', 'title', 'label'];
+    protected const OPTION_POLICY_VALUES = ['all', 'response', 'outcome'];
+    protected const OPTION_COVERAGE_VALUES = [self::OPTION_DAILY];
 
-    protected const OPTIONS_ALLOWED_PERIODS = [
-        self::OPTION_DAILY
-    ];
+    private $options;
 
-    protected static function possibleValues(string $option): string
+    protected static function possibleValues(array $values): string
     {
-        if (!array_key_exists($option, static::OPTIONS_POSSIBLE_VALUES_MAP)) {
-            return '';
-        }
-
-        return sprintf('Possible values are: %s', implode('|', static::OPTIONS_POSSIBLE_VALUES_MAP[$option]));
+        return sprintf('Possible values are: %s', implode('|', $values));
     }
 
     protected function provideDescription(): string
@@ -87,7 +83,7 @@ class GenerateCsvFile extends ScriptAction
                 'prefix' => 's',
                 'required' => true,
                 'description' => 'Identifier strategy to use. '
-                    . static::possibleValues(static::OPTION_STRATEGY)
+                    . static::possibleValues(static::OPTION_STRATEGY_VALUES)
             ],
 
             static::OPTION_POLICY => [
@@ -95,7 +91,7 @@ class GenerateCsvFile extends ScriptAction
                 'prefix' => 'p',
                 'required' => true,
                 'description' => 'Variables to extract. '
-                    . static::possibleValues(static::OPTION_POLICY)
+                    . static::possibleValues(static::OPTION_POLICY_VALUES)
             ],
 
             static::OPTION_BLACKLIST => [
@@ -122,10 +118,20 @@ class GenerateCsvFile extends ScriptAction
                 'cast' => 'string',
             ],
 
+            static::OPTION_COVERAGE => [
+                'longPrefix' => static::OPTION_COVERAGE,
+                'prefix' => 'c',
+                'required' => false,
+                'description' => 'Period for which results are selected. '
+                    . static::possibleValues(static::OPTION_COVERAGE_VALUES),
+                'defaultValue' => '',
+                'cast' => 'string'
+            ],
+
             static::OPTION_DAILY => [
                 'longPrefix' => static::OPTION_DAILY,
                 'flag' => true,
-                'description' => 'Split result exports by day'
+                'description' => sprintf('DEPRECATED. Please, use %s option. Split result exports by day', static::OPTION_COVERAGE)
             ],
 
             static::OPTION_EXOTIC => [
@@ -160,6 +166,9 @@ class GenerateCsvFile extends ScriptAction
 
     public function run(): Report
     {
+        print_r($this->options);
+        die();
+
         $exporter = $this->getConfiguredBookletExporter();
 
         $deliveries = $this->fetchDeliveries();
@@ -170,9 +179,23 @@ class GenerateCsvFile extends ScriptAction
         }, $deliveries));
 
         $report = Report::createInfo('Exporting deliveries:' . PHP_EOL . $touchedDeliveriesMessage);
-        
-        // -c = daily // --daily
+
+
+//        if ($this->hasOption())
+//        $coverage = $this->determineCoverage()
+        // -c = daily // --daily // as fallback
         // -c = weekly // --weekly
+
+        if (!$this->hasOption(static::OPTION_COVERAGE)) {
+            $report->add($exporter->export());
+        } else {
+            $method = $this->getOption(static::OPTION_COVERAGE) . 'Export';
+            if (method_exists($exporter, $method)) {
+                $reportone = $exporter->{$method};
+            }
+            //
+        }
+
 
 
         // Param 6: split export by day
