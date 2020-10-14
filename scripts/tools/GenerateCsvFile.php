@@ -181,7 +181,7 @@ class GenerateCsvFile extends ScriptAction
         $exporter->setDeliveries($deliveries);
 
         $touchedDeliveriesMessage = implode(PHP_EOL, array_map(static function ($d) {
-            return $d->getUri() . '=>' . $d->getLabel();
+            return $d->getUri() . ' => ' . $d->getLabel();
         }, $deliveries));
 
         $report = Report::createInfo('Exporting deliveries:' . PHP_EOL . $touchedDeliveriesMessage);
