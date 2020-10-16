@@ -722,7 +722,11 @@ class AllBookletsExport extends ConfigurableService
                     }
                 }
 
-                $row['SCORE'] = $this->fetchTotalScore($storage, $execution);
+                try {
+                    $row['SCORE'] = $this->fetchTotalScore($storage, $execution);
+                } catch (RuntimeException $exception) {
+                    $row['SCORE'] = 0;
+                }
                 $row['ATTEMPT_ID'] = $execution->getIdentifier();
 
                 if (empty($row)) {
