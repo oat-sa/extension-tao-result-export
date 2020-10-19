@@ -18,89 +18,146 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace oat\taoResultExports\scripts\tools;
 
+use common_Exception;
+use common_exception_Error;
+use common_exception_NotFound;
+use common_report_Report as Report;
+use LengthException;
 use oat\generis\model\OntologyAwareTrait;
 use oat\oatbox\extension\script\ScriptAction;
 use oat\taoDeliveryRdf\model\DeliveryAssemblyService;
 use oat\taoResultExports\model\export\AllBookletsExport;
+use qtism\data\storage\php\PhpStorageException;
+use RuntimeException;
 
 /**
  * Class GenerateCsvFile
  * @package oat\taoResultExports\scripts\tools
  *
- * usage : sudo -u www-data php index.php 'oat\taoResultExports\scripts\tools\GenerateCsvFile' -s title --policy all -p myDelivery
+ * Usage: sudo -u www-data php index.php 'oat\taoResultExports\scripts\tools\GenerateCsvFile' -s title --policy all -p myDelivery
+
+ * todo: add field validation, especially with possible values
  */
 class GenerateCsvFile extends ScriptAction
 {
     use OntologyAwareTrait;
 
-    protected function provideDescription()
+    public const OPTION_DELIVERY = 'delivery';
+    public const OPTION_STRATEGY = 'strategy';
+    public const OPTION_POLICY = 'policy';
+    public const OPTION_BLACKLIST = 'blacklist';
+    public const OPTION_RAW = 'raw';
+    public const OPTION_PREFIX = 'prefix';
+    public const OPTION_COVERAGE = 'coverage';
+    public const OPTION_DAILY = 'daily';
+    public const OPTION_EXOTIC = 'exotic';
+    public const OPTION_WITHOUT_TIMESTAMP = 'without-timestamp';
+
+    protected const OPTION_STRATEGY_VALUES = ['itemRef', 'identifier', 'title', 'label'];
+    protected const OPTION_POLICY_VALUES = ['all', 'response', 'outcome'];
+    protected const OPTION_COVERAGE_VALUES = [self::OPTION_DAILY];
+
+    protected static function possibleValues(array $values): string
     {
-        return 'TAO Results - generate Csv';
+        return sprintf('Possible values are: %s', implode('|', $values));
     }
 
-    protected function provideOptions()
+    protected function provideDescription(): string
+    {
+        return 'TAO Results - Generate CSV';
+    }
+
+    protected function provideOptions(): array
     {
         return [
-            'delivery' => [
+
+            static::OPTION_DELIVERY => [
+                'longPrefix' => static::OPTION_DELIVERY,
                 'prefix' => 'd',
-                'longPrefix' => 'delivery',
                 'required' => false,
                 'description' => 'List of deliveries to export'
             ],
-            'strategy' => [
+
+            static::OPTION_STRATEGY => [
+                'longPrefix' => static::OPTION_STRATEGY,
                 'prefix' => 's',
-                'longPrefix' => 'strategy',
                 'required' => true,
-                'description' => 'Identifier strategy to use. possible values are \'itemRef\'|\'identifier\'|\'title\'|\'label\'.'
+                'description' => 'Identifier strategy to use. '
+                    . static::possibleValues(static::OPTION_STRATEGY_VALUES)
             ],
-            'policy' => [
-                'longPrefix' => 'policy',
+
+            static::OPTION_POLICY => [
+                'longPrefix' => static::OPTION_POLICY,
+                'prefix' => 'p',
                 'required' => true,
-                'description' => 'variables to extract. possible values are \'all\'|\'response\'|\'outcome\'.'
+                'description' => 'Variables to extract. '
+                    . static::possibleValues(static::OPTION_POLICY_VALUES)
             ],
-            'blacklist' => [
+
+            static::OPTION_BLACKLIST => [
+                'longPrefix' => static::OPTION_BLACKLIST,
                 'prefix' => 'b',
-                'longPrefix' => 'blacklist',
+                'required' => false,
                 'description' => 'List of variables to not extract'
             ],
-            'raw' => [
+
+            static::OPTION_RAW => [
+                'longPrefix' => static::OPTION_RAW,
                 'prefix' => 'r',
-                'longPrefix' => 'raw',
                 'flag' => true,
-                'description' => 'Export in raw mode'
+                'description' => 'Export in raw mode',
+                'defaultValue' => false,
+                'cast' => 'boolean'
             ],
-            'prefix' => [
+
+            static::OPTION_PREFIX => [
+                'longPrefix' => static::OPTION_PREFIX,
                 'prefix' => 'p',
-                'longPrefix' => 'prefix',
-                'description' => 'Prefix of the file to export'
-            ],
-            'daily' => [
-                'longPrefix' => 'daily',
-                'flag' => true,
-                'description' => 'Split result exports by day'
+                'description' => 'Prefix of the file to export',
+                'defaultValue' => 'export',
+                'cast' => 'string',
             ],
 
-            'exotic' => [
-                'longPrefix' => 'exotic',
-                'flag' => true,
-                'description' => 'Allows export of exotic characters'
+            static::OPTION_COVERAGE => [
+                'longPrefix' => static::OPTION_COVERAGE,
+                'prefix' => 'c',
+                'required' => false,
+                'description' => 'Period for which results are selected. '
+                    . static::possibleValues(static::OPTION_COVERAGE_VALUES)
             ],
 
-            'withoutTimestamp' => [
-                'longPrefix'    => 'without-timestamp',
-                'prefix'        => 'wt',
-                'flag'          => true,
-                'description'   => 'Setting this flag would mean that export file won\'t have timestamp postfix in filename',
-                'defaultValue'  => false,
-                'cast'          => 'boolean'
+            static::OPTION_DAILY => [
+                'longPrefix' => static::OPTION_DAILY,
+                'flag' => true,
+                'description' => sprintf('DEPRECATED. Please, use %s option. Split result exports by day', static::OPTION_COVERAGE)
+            ],
+
+            static::OPTION_EXOTIC => [
+                'longPrefix' => static::OPTION_EXOTIC,
+                'prefix' => 'e',
+                'flag' => true,
+                'description' => 'Allows export of exotic characters',
+                'defaultValue' => false,
+                'cast' => 'boolean',
+            ],
+
+            static::OPTION_WITHOUT_TIMESTAMP => [
+                'longPrefix' => static::OPTION_WITHOUT_TIMESTAMP,
+                'prefix' => 'wt',
+                'flag' => true,
+                'description' => 'Setting this flag would mean that export file won\'t have timestamp postfix in filename',
+                'defaultValue' => false,
+                'cast' => 'boolean',
             ]
 
         ];
     }
 
-    protected function provideUsage()
+    protected function provideUsage(): array
     {
         return [
             'prefix' => 'h',
@@ -109,108 +166,147 @@ class GenerateCsvFile extends ScriptAction
         ];
     }
 
-    public function run()
+    /**
+     * @return Report
+     * @throws common_Exception
+     * @throws common_exception_Error
+     * @throws common_exception_NotFound
+     * @throws PhpStorageException
+     */
+    public function run(): Report
     {
-        $delivery = $this->getOption('delivery');
+        $exporter = $this->getConfiguredBookletExporter();
 
-        if (is_null($delivery) || strtolower($delivery) === 'all'){
-            $deliveries = DeliveryAssemblyService::singleton()->getRootClass()->getInstances(true);
-        } else {
-            $deliveries = [];
-            $explodedDeliveries = explode(',', $delivery);
-            foreach($explodedDeliveries as $delivery){
-                  $deliveries[] = $this->getResource($delivery);
-            }
-        }
-        
-        // Param 2: Identifier strategy.
-        $identifierStrategy = $this->getOption('strategy');
-        
-        // Param 3: Variable policy.
-        $variablePolicy = $this->getOption('policy');
+        $deliveries = $this->fetchDeliveries();
+        $exporter->setDeliveries($deliveries);
 
-        $variablePolicy = self::transformStringVariablePolicyIntoConstant(strtolower($variablePolicy));
+        $touchedDeliveriesMessage = implode(PHP_EOL, array_map(static function ($d) {
+            return $d->getUri() . ' => ' . $d->getLabel();
+        }, $deliveries));
 
+        $report = Report::createInfo('Exporting deliveries:' . PHP_EOL . $touchedDeliveriesMessage);
 
-        $prefix = ($this->hasOption('prefix'))?$this->getOption('prefix'):'export';
+        $coverage = $this->getCoverage();
 
-        /** @var AllBookletsExport $bookletExporter */
-        $bookletExporter = $this->getServiceLocator()->get(AllBookletsExport::SERVICE_ID);
-        $bookletExporter->setDeliveries($deliveries);
-        $bookletExporter->setIdentifierStrategy($identifierStrategy);
-        $bookletExporter->setAllowTimestampInFilename($this->isTimestampNeeded());
-        $bookletExporter->setPrefix($prefix);
-        $bookletExporter->setVariablePolicy($variablePolicy);
-        
-        // Param 4: Variable blacklist.
-        $variableBlacklist = $this->getOption('blacklist');
-        if(!is_null($variableBlacklist)){
-            $bookletExporter->setVariableBlacklist(explode(',', $variableBlacklist));
+        // Fallback to default export without eny restrictions
+        if (empty($coverage)) {
+            $report->add($exporter->export());
+
+            return $report;
         }
 
-        // Param 5: Raw mode.
-        if ($this->hasOption('raw')) {
-            $bookletExporter->addAlternateMissingDataEnconding($bookletExporter->getOption(AllBookletsExport::NOT_RESPONDED_OPTION), '');
+        $method = sprintf('%sExport', $coverage);
+
+        if (!method_exists($exporter, $method)) {
+            throw new RuntimeException(
+                sprintf(
+                    'Implementation (method %s of class %s) for specific export not found',
+                    $method,
+                    get_class($exporter)
+                )
+            );
         }
 
-        if ($this->getOption('exotic')){
-            $bookletExporter->setAllowExoticCharactersExport($this->getOption('exotic'));
-        }
-
-        // Param 6: split export by day
-        if (!$this->hasOption('daily')) {
-            $exportReport = $bookletExporter->export();
-        } else {
-            $exportReport = $bookletExporter->dailyExport();
-        }
-
-        $report = new \common_report_Report(
-            \common_report_Report::TYPE_INFO,
-            'Exporting deliveries : '. PHP_EOL . implode(PHP_EOL, array_map(function($d) {
-                return $d->getUri() . ' => ' . $d->getLabel();
-            }, $deliveries))
-        );
-        
-        $report->add($exportReport);
+        $report->add($exporter->$method());
 
         return $report;
     }
 
-    protected function formatTime($s)
+    protected function getCoverage()
     {
-        $h = floor($s / 3600);
-        $m = floor(($s / 60) % 60);
-        $s = $s % 60;
+        if ($this->hasOption(static::OPTION_COVERAGE)) {
+            return $this->getOption(static::OPTION_COVERAGE);
+        }
 
-        return "${h}h ${m}m ${s}s";
+        $coverageFlags = [];
+        foreach (static::OPTION_COVERAGE_VALUES as $value) {
+            if ($this->hasOption($value)) {
+                $coverageFlags[] = $value;
+            }
+        }
+
+        if (count($coverageFlags) > 1) {
+            throw new LengthException('Only one coverage period allowed at the same time');
+        }
+
+        return reset($coverageFlags);
     }
 
-    private static function transformStringVariablePolicyIntoConstant($strVariablePolicy)
+    protected function fetchDeliveries(): array
     {
-        $variablePolicy = AllBookletsExport::VARIABLE_POLICY_ALL;
-        
+        $deliveryOption = $this->getOption(static::OPTION_DELIVERY);
+
+        if (is_null($deliveryOption) || strtolower($deliveryOption) === 'all') {
+            return DeliveryAssemblyService::singleton()->getRootClass()->getInstances(true);
+        }
+
+        $explodedDeliveries = explode(',', $deliveryOption);
+        foreach($explodedDeliveries as $delivery){
+            $deliveries[] = $this->getResource($delivery);
+        }
+
+        return $deliveries ?? [];
+    }
+
+    protected function getConfiguredBookletExporter(): AllBookletsExport
+    {
+        /** @var AllBookletsExport $bookletExporter */
+        $bookletExporter = $this->getServiceLocator()->get(AllBookletsExport::SERVICE_ID);
+
+        $bookletExporter->setIdentifierStrategy($this->getOption(static::OPTION_STRATEGY));
+        $bookletExporter->setAllowTimestampInFilename($this->isTimeStampNeeded());
+        $bookletExporter->setPrefix($this->getOption(static::OPTION_PREFIX));
+        $bookletExporter->setVariablePolicy(
+            self::transformStringVariablePolicyIntoConstant(
+                strtolower(
+                    $this->getOption(static::OPTION_POLICY)
+                )
+            )
+        );
+
+        $variableBlacklist = $this->getOption(static::OPTION_BLACKLIST);
+        if (!is_null($variableBlacklist)) {
+            $bookletExporter->setVariableBlacklist(explode(',', $variableBlacklist));
+        }
+
+        if ($this->getOption(static::OPTION_RAW)) {
+            $bookletExporter->addAlternateMissingDataEnconding(
+                $bookletExporter->getOption(AllBookletsExport::NOT_RESPONDED_OPTION),
+                ''
+            );
+        }
+
+        if ($this->hasOption(static::OPTION_EXOTIC)) {
+            $bookletExporter->setAllowExoticCharactersExport($this->getOption(static::OPTION_EXOTIC));
+        }
+
+        return $bookletExporter;
+    }
+
+    protected function showTime(): bool
+    {
+        return true;
+    }
+
+    private static function transformStringVariablePolicyIntoConstant(string $strVariablePolicy): int
+    {
         switch ($strVariablePolicy) {
             case 'outcome':
                 $variablePolicy = AllBookletsExport::VARIABLE_POLICY_OUTCOME;
                 break;
-                
             case 'response':
                 $variablePolicy = AllBookletsExport::VARIABLE_POLICY_RESPONSE;
+                break;
+            default:
+                $variablePolicy = AllBookletsExport::VARIABLE_POLICY_ALL;
                 break;
         }
         
         return $variablePolicy;
     }
 
-    protected function showTime()
+    private function isTimeStampNeeded(): bool
     {
-        return true;
-    }
-
-    private function isTimestampNeeded()
-    {
-        $withoutTimestamp = $this->getOption('withoutTimestamp', false);
-
-        return !(bool)$withoutTimestamp;
+        return ! $this->getOption(static::OPTION_WITHOUT_TIMESTAMP);
     }
 }

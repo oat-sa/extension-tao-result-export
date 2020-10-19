@@ -265,7 +265,7 @@ class AllBookletsExport extends ConfigurableService
 
         $currentDate = new \DateTime();
         $interval = new \DateInterval('P1D');
-        $report = \common_report_Report::createInfo('Exporting results for the last ' . $numberOfDayToExport . 'day(s):');
+        $report = \common_report_Report::createInfo('Exporting results for the last ' . $numberOfDayToExport . ' day(s):');
 
         for ($i=0; $i<$numberOfDayToExport; $i++) {
             try {
@@ -276,7 +276,7 @@ class AllBookletsExport extends ConfigurableService
                 $report->add($subReport);
             } catch (\Exception $e) {
                 $report->setType(\common_report_Report::TYPE_ERROR);
-                $report->setMessage('Some errors occurred during export : ' . $e->getMessage());
+                $report->setMessage('Some errors occurred during export: ' . $e->getMessage());
             }
         }
 
@@ -620,6 +620,9 @@ class AllBookletsExport extends ConfigurableService
                 $row['STARTTIME'] = $startTime;
                 $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
 
+
+                $attemptScore = [];
+
                 $itemCallIds = $storage->getRelatedItemCallIds($execution->getIdentifier());
                 foreach ($itemCallIds as $itemCallId) {
                     $itemResults = $storage->getVariables($itemCallId);
@@ -632,6 +635,10 @@ class AllBookletsExport extends ConfigurableService
                         /** @var \taoResultServer_models_classes_Variable $variable */
                         $variable = $itemResult->variable;
                         $headerIdentifier = $itemIdentifier . '-' . $variable->getIdentifier();
+
+                        if ($variable->getIdentifier() === 'SCORE') {
+                            $attemptScore[$itemIdentifier] = (int)$variable->getValue();
+                        }
 
                         // Deal with variable policy...
                         if (($variable instanceof \taoResultServer_models_classes_ResponseVariable && $this->variablePolicy === self::VARIABLE_POLICY_OUTCOME) ||
@@ -722,7 +729,11 @@ class AllBookletsExport extends ConfigurableService
                     }
                 }
 
-                $row['SCORE'] = $this->fetchTotalScore($storage, $execution);
+                try {
+                    $row['SCORE'] = $this->fetchTotalScore($storage, $execution);
+                } catch (RuntimeException $exception) {
+                    $row['SCORE'] = array_sum($attemptScore);
+                }
                 $row['ATTEMPT_ID'] = $execution->getIdentifier();
 
                 if (empty($row)) {
