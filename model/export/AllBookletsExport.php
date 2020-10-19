@@ -620,6 +620,9 @@ class AllBookletsExport extends ConfigurableService
                 $row['STARTTIME'] = $startTime;
                 $row['FINISHTIME'] = (($endTime = $execution->getFinishTime()) !== null) ? $this->cleanTimestamp($endTime) : '';
 
+
+                $attemptScore = [];
+
                 $itemCallIds = $storage->getRelatedItemCallIds($execution->getIdentifier());
                 foreach ($itemCallIds as $itemCallId) {
                     $itemResults = $storage->getVariables($itemCallId);
@@ -632,6 +635,10 @@ class AllBookletsExport extends ConfigurableService
                         /** @var \taoResultServer_models_classes_Variable $variable */
                         $variable = $itemResult->variable;
                         $headerIdentifier = $itemIdentifier . '-' . $variable->getIdentifier();
+
+                        if ($variable->getIdentifier() === 'SCORE') {
+                            $attemptScore[$itemIdentifier] = (int)$variable->getValue();
+                        }
 
                         // Deal with variable policy...
                         if (($variable instanceof \taoResultServer_models_classes_ResponseVariable && $this->variablePolicy === self::VARIABLE_POLICY_OUTCOME) ||
@@ -725,7 +732,7 @@ class AllBookletsExport extends ConfigurableService
                 try {
                     $row['SCORE'] = $this->fetchTotalScore($storage, $execution);
                 } catch (RuntimeException $exception) {
-                    $row['SCORE'] = 0;
+                    $row['SCORE'] = array_sum($attemptScore);
                 }
                 $row['ATTEMPT_ID'] = $execution->getIdentifier();
 
