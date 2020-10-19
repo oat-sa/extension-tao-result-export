@@ -265,7 +265,7 @@ class AllBookletsExport extends ConfigurableService
 
         $currentDate = new \DateTime();
         $interval = new \DateInterval('P1D');
-        $report = \common_report_Report::createInfo('Exporting results for the last ' . $numberOfDayToExport . 'day(s):');
+        $report = \common_report_Report::createInfo('Exporting results for the last ' . $numberOfDayToExport . ' day(s):');
 
         for ($i=0; $i<$numberOfDayToExport; $i++) {
             try {
@@ -276,7 +276,7 @@ class AllBookletsExport extends ConfigurableService
                 $report->add($subReport);
             } catch (\Exception $e) {
                 $report->setType(\common_report_Report::TYPE_ERROR);
-                $report->setMessage('Some errors occurred during export : ' . $e->getMessage());
+                $report->setMessage('Some errors occurred during export: ' . $e->getMessage());
             }
         }
 
