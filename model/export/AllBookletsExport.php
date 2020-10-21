@@ -564,6 +564,7 @@ class AllBookletsExport extends ConfigurableService
             }
 
             $headers = array_merge($headers, ['SCORE', 'ATTEMPT_ID']);
+            $headers = array_map([$this, 'removeHiddenCharacters'], $headers);
 
             $this->headers = array_unique($headers);
         }
@@ -900,6 +901,8 @@ class AllBookletsExport extends ConfigurableService
         }
 
         foreach ($neededColumns as $column) {
+            $column = $this->removeHiddenCharacters($column);
+
             if (!in_array($column, array_keys($row))) {
                 $row[$column] = $this->determineMissingDataEncoding($this->getOption(self::NOT_ATTEMPTED_OPTION), $column);
             }
@@ -1079,5 +1082,10 @@ class AllBookletsExport extends ConfigurableService
     public function setAllowTimestampInFilename($allowTimestamp = true)
     {
         $this->allowTimestampInFilename = $allowTimestamp;
+    }
+
+    protected function removeHiddenCharacters(string $field): string
+    {
+        return preg_replace('/[\x00-\x1F\x80-\xFF]/', '', $field);
     }
 }
