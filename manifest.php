@@ -25,15 +25,7 @@ return [
     'label' => 'Export Tools',
     'description' => 'Extension providing tools dedicated to operations.',
     'license' => 'GPL-2.0',
-    'version' => '0.9.0',
     'author' => 'Open Assessment Technologies',
-    'requires' => [
-        'generis' => '>=6.5.1',
-        'funcAcl' => '>=2.9.0',
-        'taoQtiTest' => '>=10.11.0',
-        'taoDeliveryRdf' => '>=1.0.0',
-        'tao' => '>=12.21.4'
-    ],
     'acl' => [
     ],
     'routes' => [
