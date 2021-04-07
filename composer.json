@@ -41,8 +41,6 @@
         "oat-sa/extension-tao-outcomerds" : ">=8.0.0",
         "oat-sa/lib-tao-dtms": "1.0.0"
     },
-    "require-dev": {
-    },
     "minimum-stability" : "dev",
     "autoload" : {
         "psr-4" : {
