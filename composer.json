@@ -39,7 +39,7 @@
         "oat-sa/extension-tao-lti" : ">=12.0.0",
         "oat-sa/extension-tao-outcome" : ">=13.0.0",
         "oat-sa/extension-tao-outcomerds" : ">=8.0.0",
-        "oat-sa/lib-tao-dtms": "1.0.0"
+        "oat-sa/lib-tao-dtms": "^1.0.1"
     },
     "minimum-stability" : "dev",
     "autoload" : {
